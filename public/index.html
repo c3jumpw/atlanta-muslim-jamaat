@@ -435,6 +435,24 @@ td.wrap { white-space: normal; min-width: 220px; }
 .tap-ring { transform-box: fill-box; transform-origin: center; animation: tap-pulse 1.6s ease-out infinite; }
 @keyframes tap-pulse { 0% { transform: scale(.8); opacity: 1; } 100% { transform: scale(1.7); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .tap-ring { animation: none; } }
+
+/* ---------- Analytics & ledger ---------- */
+.analytics-layout { display: grid; gap: 16px; }
+@media (min-width: 1100px) { .analytics-layout { grid-template-columns: minmax(0, 1fr) 290px; align-items: start; } .report-panel { position: sticky; top: 80px; } }
+.analytics-layout > * { min-width: 0; }
+.kpis.kpis-3 { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 760px) { .kpis.kpis-3 { grid-template-columns: repeat(3, 1fr); } }
+.kpi.stat { position: relative; padding-right: 38px; }
+.kpi.stat.off { opacity: .5; }
+.stat-pick { position: absolute; top: 10px; right: 10px; }
+.stat-pick input, .sec-pick input, .perm-table input { width: 18px; height: 18px; accent-color: var(--green); }
+.sec-pick { white-space: nowrap; font-weight: 600; }
+@media (min-width: 1100px) { .report-jump { display: none; } }
+.delta { font-weight: 700; font-size: 13px; }
+.delta.up { color: var(--ok); }
+.delta.down { color: var(--bad); }
+.perm-table td, .perm-table th { text-align: center; }
+.perm-table td:first-child, .perm-table th:first-child { text-align: left; }
 /* ---------- Modal & toast ---------- */
 .modal-scrim { position: fixed; inset: 0; background: rgba(5, 20, 14, .5); z-index: 80; display: grid; place-items: end center; padding: 0; }
 @media (min-width: 640px) { .modal-scrim { place-items: center; padding: 20px; } }
@@ -640,6 +658,7 @@ const TODAY_ISO = (() => {
   const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   return p; // YYYY-MM-DD in Eastern time
 })();
+const dIsoLocal = iso => new Date(iso + 'T12:00:00Z');
 const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const lastFriday = (() => { const d = new Date(TODAY_ISO + 'T12:00:00Z'); const back = (d.getUTCDay() - 5 + 7) % 7 || 7; return addDays(TODAY_ISO, -back); })();
 let _id = 1000; const uid = p => p + (++_id).toString(36);
@@ -666,18 +685,40 @@ function seed() {
       prefs: { announcements: true, news: i % 3 !== 0, articles: i % 2 === 0, events: true, khutbah: i % 4 !== 3, alerts: true } });
   });
   users[0].name = 'Aisha Rahman'; users[1].name = 'Yusuf Ali'; users[1].tier = 'paid'; users[1].dues = 'active';
-  users[2].role = 'editor'; users[3].role = 'moderator'; users[23].status = 'suspended';
-  users.push({ id: 'admin', name: 'Br. Kareem (Admin)', email: 'admin@example.com', phone: '', tier: 'paid', role: 'superadmin', status: 'active', joined: addDays(TODAY_ISO, -200), provider: 'Google', dues: 'active', renews: addDays(TODAY_ISO, 40), notes: '', prefs: { announcements: true, news: true, articles: true, events: true, khutbah: true, alerts: true } });
+  const staff = { 2: ['editor', 'Communications lead'], 3: ['moderator', 'Forum moderator'], 4: ['executive', 'Treasurer'], 5: ['office', 'Office manager'], 6: ['executive', 'President'], 10: ['coordinator', 'Youth coordinator'] };
+  Object.entries(staff).forEach(([i, [role, title]]) => { users[i].role = role; users[i].title = title; });
+  users[23].status = 'suspended';
+  users.push({ id: 'imam', name: 'Imam (name to be added)', email: 'imam@example.com', phone: '', tier: 'paid', role: 'imam', title: 'Imam', status: 'active', joined: addDays(TODAY_ISO, -300), provider: 'Email', dues: 'active', renews: addDays(TODAY_ISO, 60), notes: '', prefs: { announcements: true, news: true, articles: true, events: true, khutbah: true, alerts: true } });
+  users.push({ id: 'admin', name: 'Br. Kareem (Admin)', email: 'admin@example.com', phone: '', tier: 'paid', role: 'superadmin', title: 'Webmaster', status: 'active', joined: addDays(TODAY_ISO, -200), provider: 'Google', dues: 'active', renews: addDays(TODAY_ISO, 40), notes: '', prefs: { announcements: true, news: true, articles: true, events: true, khutbah: true, alerts: true } });
 
+  /* Twelve months of sample giving: online card gifts plus approved cash, check and Zelle entries, with a Ramadan rise. */
   const donations = [];
-  const fundsCycle = ['sadaqah', 'general', 'zakat', 'sadaqah', 'building', 'general', 'sadaqah', 'zakat'];
-  for (let i = 0; i < 46; i++) {
-    const amt = [20, 50, 25, 100, 250, 10, 75, 40, 500, 30][i % 10];
-    donations.push({ id: uid('d'), userId: i % 5 === 0 ? null : 'u' + (i % 30), name: i % 5 === 0 ? 'Anonymous' : null, fund: fundsCycle[i % fundsCycle.length], amount: amt, freq: i % 6 === 0 ? 'monthly' : 'once', date: addDays(TODAY_ISO, -Math.round(i * 1.3)) });
+  let seedN = 7; const rnd = () => (seedN = (seedN * 9301 + 49297) % 233280) / 233280;
+  const amts = [10, 20, 25, 25, 50, 50, 75, 100, 100, 150, 250, 500, 1000];
+  const fundPick = r => r < .34 ? 'sadaqah' : r < .58 ? 'general' : r < .74 ? 'zakat' : r < .9 ? 'building' : 'sadaqah';
+  for (let day = 365; day >= 1; day--) {
+    const date = addDays(TODAY_ISO, -day), md = date.slice(5);
+    const ramadan = date >= '2026-02-18' && date <= '2026-03-20';
+    const friday = dIsoLocal(date).getUTCDay() === 5;
+    const n = Math.floor(rnd() * (ramadan ? 5 : 2.2)) + (friday ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      const offline = rnd() < .24, r = rnd();
+      const method = offline ? (r < .5 ? 'Cash' : r < .8 ? 'Check' : 'Zelle') : 'Card';
+      let fund = fundPick(rnd()); if (ramadan && rnd() < .35) fund = rnd() < .5 ? 'zakat' : 'iftar'; if (date >= '2026-03-15' && date <= '2026-03-20' && rnd() < .5) fund = 'fitr';
+      const who = rnd() < .2 ? null : 'u' + Math.floor(rnd() * 36);
+      donations.push({ id: uid('d'), userId: who, name: who ? null : (offline && method === 'Cash' ? 'Jumu’ah collection box' : 'Anonymous'), fund, amount: amts[Math.floor(rnd() * amts.length)] * (ramadan ? 1.4 : 1) | 0, freq: !offline && rnd() < .14 ? 'monthly' : 'once', date, method, source: offline ? 'offline' : 'online', status: 'approved', ...(offline ? { loggedBy: 'u5', loggedAt: date, approvedBy: rnd() < .5 ? 'u4' : 'u6', approvedAt: addDays(date, 1), ref: method === 'Check' ? 'Check #' + (1800 + Math.floor(rnd() * 400)) : '' } : {}) });
+    }
   }
+  donations.push(
+    { id: 'd-pend1', userId: null, name: 'Jumu’ah collection box', fund: 'sadaqah', amount: 312, freq: 'once', date: addDays(TODAY_ISO, -1), method: 'Cash', source: 'offline', status: 'pending', ref: 'Envelope 11/6', loggedBy: 'u5', loggedAt: TODAY_ISO, note: 'Friday collection box, counted by Bilal and Hamza after Jumu’ah.' },
+    { id: 'd-pend2', userId: 'u12', name: null, fund: 'building', amount: 1000, freq: 'once', date: addDays(TODAY_ISO, -2), method: 'Check', source: 'offline', status: 'pending', ref: 'Check #2041', loggedBy: 'u4', loggedAt: addDays(TODAY_ISO, -1), note: 'Handed to the treasurer after Isha.' },
+    { id: 'd-pend3', userId: 'u7', name: null, fund: 'zakat', amount: 150, freq: 'once', date: addDays(TODAY_ISO, -3), method: 'Zelle', source: 'offline', status: 'pending', ref: 'Confirmation ZX81-4471', loggedBy: 'u5', loggedAt: addDays(TODAY_ISO, -2), note: '' },
+    { id: 'd-rej1', userId: null, name: 'Anonymous', fund: 'general', amount: 50, freq: 'once', date: addDays(TODAY_ISO, -9), method: 'Cash', source: 'offline', status: 'rejected', ref: '', loggedBy: 'u5', loggedAt: addDays(TODAY_ISO, -9), rejectedBy: 'u4', rejectedAt: addDays(TODAY_ISO, -8), reason: 'Duplicate of the entry logged the same evening.' }
+  );
 
   return {
-    v: 2,
+    v: 3,
+    perms: null,
     emailSettings: { fromName: 'Atlanta Muslim Jamaat', fromAddress: 'updates@your-domain.org', auto: { announcement: true, news: false, article: true, resource: false, khutbah: true, event: true, alert: true } },
     emails: [],
     integrations: { domain: '', supabase: false, resend: false, stripe: false },
@@ -801,10 +842,10 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const para = s => esc(s).split(/\n\s*\n/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
 const money = n => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: Number(n) % 1 ? 2 : 0 });
-const STORE_KEY = 'amj-preview-v2';
+const STORE_KEY = 'amj-preview-v3';
 let S;
 function load() {
-  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 2) { if (!s.resources.some(r => r.id === 'r-install')) s.resources.unshift(INSTALL_RESOURCE); return s; } } } catch (e) {}
+  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 3) { if (!s.resources.some(r => r.id === 'r-install')) s.resources.unshift(INSTALL_RESOURCE); return s; } } } catch (e) {}
   return seed();
 }
 function save() {
@@ -841,6 +882,7 @@ const IC = {
   hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11m0-4.5a1.5 1.5 0 0 1 3 0V11m0-3a1.5 1.5 0 0 1 3 0v5.5c0 4-2.5 7.5-6.5 7.5-2.5 0-4-1.2-5.5-3.5L3.2 14a1.5 1.5 0 0 1 2.5-1.6L8 15"/>',
   gift: '<path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1-2-2.3-3.5-4-3.5a1.8 1.8 0 0 0 0 3.5zm0 0c1-2 2.3-3.5 4-3.5a1.8 1.8 0 0 1 0 3.5z"/>',
   pin: '<path d="M9 4h6l-1 6 3 3H7l3-3zM12 13v7"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/>'
 };
 const icon = (k, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k] || ''}</svg>`;
@@ -901,18 +943,26 @@ const me = () => S.users.find(u => u.id === S.currentUserId) || null;
 const userById = id => S.users.find(u => u.id === id);
 const level = () => { const u = me(); if (!u) return 'visitor'; return u.tier === 'paid' ? 'paid' : 'free'; };
 const isMember = () => level() !== 'visitor';
-/* Staff roles and what each can manage */
-const ROLES = [['member', 'Member'], ['moderator', 'Moderator'], ['editor', 'Editor'], ['admin', 'Admin'], ['superadmin', 'Super admin']];
+/* Staff roles and what each can manage. Super admins can adjust these in Admin → Members & team → Team & roles. */
+const ROLES = [['member', 'Member'], ['moderator', 'Moderator'], ['coordinator', 'Program coordinator'], ['editor', 'Editor'], ['imam', 'Imam'], ['office', 'Office manager'], ['executive', 'Executive'], ['superadmin', 'Super admin']];
 const ROLE_LABEL = Object.fromEntries(ROLES);
-const PERMS = {
-  superadmin: ['overview', 'content', 'messages', 'inbox', 'members', 'roles', 'events', 'gallery', 'forum', 'email', 'prayer', 'site', 'integrations'],
-  admin: ['overview', 'content', 'messages', 'inbox', 'members', 'events', 'gallery', 'forum', 'email', 'prayer', 'site'],
-  editor: ['overview', 'content', 'events', 'gallery'],
+const PERM_KEYS = ['overview', 'analytics', 'finance', 'approve', 'members', 'messages', 'inbox', 'content', 'events', 'gallery', 'forum', 'email', 'prayer', 'site', 'roles', 'integrations'];
+const DEFAULT_PERMS = {
+  superadmin: PERM_KEYS,
+  executive: ['overview', 'analytics', 'finance', 'approve', 'members', 'messages', 'inbox'],
+  office: ['overview', 'finance', 'members', 'messages', 'inbox', 'events', 'prayer', 'site', 'email'],
+  imam: ['overview', 'content', 'inbox', 'prayer', 'forum'],
+  editor: ['overview', 'content', 'events', 'gallery', 'email'],
+  coordinator: ['overview', 'events', 'gallery'],
   moderator: ['overview', 'forum', 'gallery'],
   member: []
 };
-const roleOf = u => (u && PERMS[u.role]) ? u.role : 'member';
-const can = p => PERMS[roleOf(me())].includes(p);
+const permsFor = r => r === 'superadmin' ? PERM_KEYS : ((S && S.perms && S.perms[r]) || DEFAULT_PERMS[r] || []);
+const roleOf = u => { const r = u && (u.role === 'admin' ? 'office' : u.role); return r && DEFAULT_PERMS[r] ? r : 'member'; };
+const can = p => permsFor(roleOf(me())).includes(p);
+const roleTitle = u => u ? (u.title || ROLE_LABEL[roleOf(u)]) : '';
+/* Donations count only once approved (offline gifts wait for a second approver). */
+const counted = d => (d.status || 'approved') === 'approved';
 const isStaff = () => roleOf(me()) !== 'member';
 const isAdmin = () => can('members');
 const canPost = () => isMember() && me().status !== 'suspended';
@@ -985,7 +1035,7 @@ function renderShell(route) {
     <a href="#save-to-phone" class="${g === 'save-to-phone' ? 'on' : ''}">Save this site to your phone</a>
     ${isStaff() ? `<a href="#admin" class="${g === 'admin' ? 'on' : ''}">Admin dashboard ${pendingCount() ? `<span class="badge">${pendingCount()}</span>` : ''}</a>` : ''}`;
   const others = S.users.filter(x => x.custom);
-  $('#role-select').innerHTML = [['visitor', 'Visitor'], ['u0', 'Free member'], ['u1', 'Supporting member'], ['u3', 'Moderator'], ['u2', 'Editor'], ['admin', 'Super admin'], ...others.map(o => [o.id, 'You: ' + o.name])]
+  $('#role-select').innerHTML = [['visitor', 'Visitor'], ['u0', 'Free member'], ['u1', 'Supporting member'], ['u3', 'Moderator'], ['u10', 'Program coordinator'], ['u2', 'Editor'], ['imam', 'Imam'], ['u5', 'Office manager'], ['u4', 'Executive (Treasurer)'], ['u6', 'Executive (President)'], ['admin', 'Super admin'], ...others.map(o => [o.id, 'You: ' + o.name])]
     .map(([v, l]) => `<option value="${v}" ${(S.currentUserId || 'visitor') === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
 }
 let sessionDismissed = false;
@@ -1550,7 +1600,7 @@ function vDonate(scrollZakat) {
     </form>
     <div class="stack">
       <div class="card"><h3>Where your gift goes</h3><ul class="small prose" style="margin:0"><li><strong>Zakat</strong> goes only to eligible recipients, kept separate from other funds.</li><li><strong>Sadaqah</strong> helps families in need and community programs.</li><li><strong>Operations</strong> keeps the lights on: utilities, cleaning, insurance and staff.</li></ul></div>
-      ${u ? `<div class="card"><h3>Your giving</h3><p class="small muted">${money(S.donations.filter(d => d.userId === u.id).reduce((s, d) => s + d.amount, 0))} given this year.</p><a class="btn ghost sm" href="#account">Receipts and statements</a></div>` : `<div class="card"><h3>Track your giving</h3><p class="small muted">Sign in to keep your receipts in one place and get a year-end statement.</p><a class="btn ghost sm" href="#account">Sign in</a></div>`}
+      ${u ? `<div class="card"><h3>Your giving</h3><p class="small muted">${money(S.donations.filter(d => d.userId === u.id && counted(d) && d.date >= nowIso().slice(0, 4) + '-01-01').reduce((s, d) => s + d.amount, 0))} given this year.</p><p class="small muted" style="margin-top:-6px">Gave cash or a check at the masjid? Staff log it and it appears here once verified.</p><a class="btn ghost sm" href="#account">Receipts and statements</a></div>` : `<div class="card"><h3>Track your giving</h3><p class="small muted">Sign in to keep your receipts in one place and get a year-end statement.</p><a class="btn ghost sm" href="#account">Sign in</a></div>`}
       <div class="card"><h3>Membership dues</h3><p class="small muted">Supporting members pay ${money(S.settings.tiers.monthly)} a month or ${money(S.settings.tiers.yearly)} a year.</p><a class="btn ghost sm" href="#membership">See membership</a></div>
     </div>
   </div>
@@ -1651,8 +1701,8 @@ function vAccount() {
           ${m.action ? (resp ? `<span class="chip ok">${icon('check')} You responded: ${esc(resp.answer)}</span>` : `<div class="row">${m.type === 'reminder' && /renew/i.test(m.action) ? `<a class="btn sm" href="#membership">${esc(m.action)}</a>` : `<button class="btn sm" data-action="respond" data-id="${m.id}">${esc(m.action)}</button>`}${m.type === 'request' ? `<button class="btn ghost sm" data-action="respond" data-id="${m.id}" data-v="Not this time">Not this time</button>` : ''}</div>`) : ''}</div>`; }).join('')}
       </div>
       <div class="card"><h3>Member announcements</h3>${ann.map(p => `<a class="list-item" href="#news-${p.id}">${dateTile(p.date)}<div>${audienceChip(p.audience)}<h4 style="margin:4px 0 0">${esc(p.title)}</h4></div></a>`).join('') || '<div class="empty">None right now.</div>'}</div>
-      <div class="card"><h3>Giving history</h3>${gifts.length ? `<div class="table-wrap" style="border:0"><table><thead><tr><th>Date</th><th>Fund</th><th>Amount</th><th></th></tr></thead><tbody>${gifts.map(d => `<tr><td>${fmtDate(d.date, { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>${esc(FUNDS.find(f => f.id === d.fund)?.name || d.fund)}${d.freq !== 'once' ? ` <span class="chip">${d.freq}</span>` : ''}</td><td class="num">${money(d.amount)}</td><td><button class="link-btn small" data-action="receipt" data-id="${d.id}">Receipt</button></td></tr>`).join('')}</tbody></table></div>
-        <p class="small" style="margin-top:10px">Total this year: <strong class="num">${money(gifts.reduce((s, d) => s + d.amount, 0))}</strong></p>` : '<div class="empty">No gifts yet. <a href="#donate">Make your first gift</a>.</div>'}</div>
+      <div class="card"><h3>Giving history</h3>${gifts.length ? `<div class="table-wrap" style="border:0"><table><thead><tr><th>Date</th><th>Fund</th><th>Amount</th><th></th></tr></thead><tbody>${gifts.map(d => `<tr><td>${fmtDate(d.date, { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>${esc(FUNDS.find(f => f.id === d.fund)?.name || d.fund)}${d.freq !== 'once' ? ` <span class="chip">${d.freq}</span>` : ''}</td><td class="num">${money(d.amount)}</td><td>${counted(d) ? `<button class="link-btn small" data-action="receipt" data-id="${d.id}">Receipt</button>` : d.status === 'pending' ? '<span class="chip warn">Being verified</span>' : '<span class="chip">Not recorded</span>'}</td></tr>`).join('')}</tbody></table></div>
+        <p class="small" style="margin-top:10px">Total this year: <strong class="num">${money(gifts.filter(d => counted(d) && d.date >= nowIso().slice(0, 4) + '-01-01').reduce((s, d) => s + d.amount, 0))}</strong></p>` : '<div class="empty">No gifts yet. <a href="#donate">Make your first gift</a>.</div>'}</div>
     </div>
     <div class="stack">
       <div class="card stack-sm"><h3 style="margin:0">Membership</h3>
@@ -1809,9 +1859,10 @@ function createUser(name, email, provider, emails) {
 /* ================= Admin: shared ================= */
 const PREF_KEYS = [['announcements', 'Member announcements'], ['news', 'News posts'], ['articles', 'New articles and resources'], ['events', 'New events'], ['khutbah', 'Khutbah summaries'], ['alerts', 'Urgent alerts such as janazah and closures']];
 const KIND_PREF = { announcement: 'announcements', news: 'news', article: 'articles', resource: 'articles', khutbah: 'khutbah', event: 'events', alert: 'alerts', message: 'announcements' };
-const pendingCount = () => (can('gallery') ? S.gallery.filter(g => g.status === 'pending').length : 0) + (can('inbox') ? S.inbox.filter(i => i.status === 'new').length : 0) + (can('forum') ? S.topics.filter(t => t.reports > 0).length : 0);
+const approvable = () => S.donations.filter(d => d.status === 'pending' && d.loggedBy !== me()?.id);
+const pendingCount = () => (can('approve') ? approvable().length : 0) + (can('gallery') ? S.gallery.filter(g => g.status === 'pending').length : 0) + (can('inbox') ? S.inbox.filter(i => i.status === 'new').length : 0) + (can('forum') ? S.topics.filter(t => t.reports > 0).length : 0);
 const ADMIN_NAV = [
-  ['', 'Overview', 'overview'], ['content', 'Posts & content', 'content'], ['members', 'Members & team', 'members'], ['messages', 'Message members', 'messages'],
+  ['', 'Overview', 'overview'], ['analytics', 'Analytics & reports', 'analytics'], ['finance', 'Donations ledger', 'finance'], ['content', 'Posts & content', 'content'], ['members', 'Members & team', 'members'], ['messages', 'Message members', 'messages'],
   ['inbox', 'Inbox', 'inbox'], ['events', 'RSVPs & volunteers', 'events'], ['gallery', 'Gallery approvals', 'gallery'], ['forum', 'Forum moderation', 'forum'],
   ['email', 'Email notifications', 'email'], ['prayer', 'Prayer & Jumu’ah', 'prayer'], ['site', 'Site settings', 'site'], ['integrations', 'Connections', 'integrations']
 ];
@@ -1843,9 +1894,9 @@ function vAdmin(sec = '') {
   let title, body;
   if (sec.startsWith('edit-')) { const [, kind, id] = sec.match(/^edit-([a-z]+)-(.+)$/) || []; if (!CK[kind]) return notFound(); if (!can('content')) return noAccess(); title = (id === 'new' ? 'New ' : 'Edit ') + CK[kind].label.toLowerCase(); body = aEditor(kind, id); sec = 'content'; }
   else if (sec.startsWith('member-')) { if (!can('members')) return noAccess(); const u = userById(sec.slice(7)); if (!u) return notFound(); title = u.name; body = aMember(u); sec = 'members'; }
-  else { const nav = ADMIN_NAV.find(n => n[0] === sec); if (!nav) return notFound(); if (!can(nav[2])) return noAccess(); title = nav[1]; body = ({ '': aOverview, content: aContent, members: aMembers, messages: aMessages, inbox: aInbox, events: aEvents, gallery: aGallery, forum: aForum, email: aEmail, prayer: aPrayer, site: aSite, integrations: aIntegrations })[sec](); }
-  const badges = { inbox: can('inbox') && S.inbox.filter(i => i.status === 'new').length, gallery: S.gallery.filter(g => g.status === 'pending').length, forum: S.topics.filter(t => t.reports > 0).length, email: S.emails.filter(e => e.status === 'waiting').length };
-  return `<div class="page-head"><div class="eyebrow">Admin dashboard · ${ROLE_LABEL[roleOf(me())]}</div><h1>${esc(title)}</h1></div>
+  else { const nav = ADMIN_NAV.find(n => n[0] === sec); if (!nav) return notFound(); if (!can(nav[2])) return noAccess(); title = nav[1]; body = ({ '': aOverview, analytics: aAnalytics, finance: aFinance, content: aContent, members: aMembers, messages: aMessages, inbox: aInbox, events: aEvents, gallery: aGallery, forum: aForum, email: aEmail, prayer: aPrayer, site: aSite, integrations: aIntegrations })[sec](); }
+  const badges = { finance: can('approve') && approvable().length, inbox: can('inbox') && S.inbox.filter(i => i.status === 'new').length, gallery: S.gallery.filter(g => g.status === 'pending').length, forum: S.topics.filter(t => t.reports > 0).length, email: S.emails.filter(e => e.status === 'waiting').length };
+  return `<div class="page-head"><div class="eyebrow">Admin dashboard · ${esc(roleTitle(me()))}</div><h1>${esc(title)}</h1></div>
   <div class="admin-shell"><nav class="admin-nav" aria-label="Admin sections">${ADMIN_NAV.filter(n => can(n[2])).map(([k, l]) => `<a href="#admin${k ? '-' + k : ''}" class="${sec === k ? 'on' : ''}">${l}${badges[k] ? `<span class="badge">${badges[k]}</span>` : ''}</a>`).join('')}</nav><div class="stack">${body}</div></div>`;
 }
 
@@ -1856,15 +1907,17 @@ function aOverview() {
   const members = S.users.filter(u => u.status !== 'invited');
   const paid = members.filter(u => u.tier === 'paid');
   const newM = members.filter(u => u.joined.slice(0, 7) === m0).length;
-  const gifts30 = S.donations.filter(d => d.date > d30);
+  const gifts30 = S.donations.filter(d => counted(d) && d.date > d30);
   const sum30 = gifts30.reduce((s, d) => s + d.amount, 0);
   const overdue = members.filter(u => u.dues === 'overdue').length;
   const pend = pendingCount();
   const byFund = FUNDS.map(f => ({ label: f.name, value: gifts30.filter(d => d.fund === f.id).reduce((s, d) => s + d.amount, 0) })).filter(x => x.value > 0).sort((a, b) => b.value - a.value);
   const months = []; for (let i = 5; i >= 0; i--) { const d = new Date(today + 'T12:00:00Z'); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - i); months.push(d.toISOString().slice(0, 7)); }
   const signups = months.map(k => ({ label: new Date(k + '-15T12:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }), value: members.filter(u => u.joined.slice(0, 7) === k).length }));
-  const showMoney = can('members');
+  const showMoney = can('finance') || can('analytics');
+  const appr = can('approve') ? approvable() : [];
   return `
+  ${appr.length ? `<a class="card row between" href="#admin-finance" style="text-decoration:none;color:inherit;border-color:var(--gold);background:var(--gold-soft)"><span><strong>${appr.length} donation${appr.length === 1 ? '' : 's'} waiting for your approval</strong><br><span class="small muted">${money(appr.reduce((s, d) => s + d.amount, 0))} logged from outside the site. They count once approved.</span></span>${icon('arrow')}</a>` : ''}
   ${can('content') ? `<div class="card pad-lg stack-sm"><h3 style="margin:0">Create</h3><p class="small muted" style="margin:0">Pick what you want to add. You can save a draft and publish later.</p>${createTiles()}</div>
   <form class="card form-grid" data-form="quick"><h3 style="margin:0">Quick update</h3>
     <label class="f"><span class="sr">Title</span><input name="title" required placeholder="Title, e.g. Fajr moves to 6:30 AM on Sunday"></label>
@@ -1872,18 +1925,18 @@ function aOverview() {
     <div class="row between"><div class="row"><select name="audience" style="width:auto" aria-label="Who can see it"><option value="public">Everyone</option><option value="members">Members</option><option value="paid">Supporting members</option></select>
       <label class="check small"><input type="checkbox" name="email"> Email subscribers</label></div><button class="btn" type="submit">${icon('send')} Post now</button></div></form>` : ''}
   <div class="kpis">
-    <a class="kpi" href="${can('members') ? '#admin-members' : '#admin'}" style="text-decoration:none;color:inherit"><div class="k">Members</div><div class="v">${members.length}</div><div class="d">${paid.length} supporting · ${members.length - paid.length} free</div></a>
+    <a class="kpi" href="${can('members') ? '#admin-members' : can('analytics') ? '#admin-analytics' : '#admin'}" style="text-decoration:none;color:inherit"><div class="k">Members</div><div class="v">${members.length}</div><div class="d">${paid.length} supporting · ${members.length - paid.length} free</div></a>
     <div class="kpi"><div class="k">New this month</div><div class="v">${newM}</div><div class="d">Sign-ups since ${fmtDate(m0 + '-01', { month: 'short', day: 'numeric' })}</div></div>
     ${showMoney ? `<div class="kpi"><div class="k">Given, last 30 days</div><div class="v">${money(sum30)}</div><div class="d">${gifts30.length} gifts</div></div>` : `<div class="kpi"><div class="k">Drafts</div><div class="v">${allContent().filter(c => statusOf(c.it) === 'draft').length}</div><div class="d">Waiting to publish</div></div>`}
-    <div class="kpi ${pend ? 'attn' : ''}"><div class="k">Needs attention</div><div class="v">${pend}</div><div class="d">${[can('inbox') && `${S.inbox.filter(i => i.status === 'new').length} messages`, can('gallery') && `${S.gallery.filter(g => g.status === 'pending').length} photos`, can('forum') && `${S.topics.filter(t => t.reports > 0).length} reports`, can('members') && `${overdue} dues overdue`].filter(Boolean).join(' · ')}</div></div>
+    <div class="kpi ${pend ? 'attn' : ''}"><div class="k">Needs attention</div><div class="v">${pend}</div><div class="d">${[can('inbox') && `${S.inbox.filter(i => i.status === 'new').length} messages`, can('gallery') && `${S.gallery.filter(g => g.status === 'pending').length} photos`, can('forum') && `${S.topics.filter(t => t.reports > 0).length} reports`, can('approve') && `${approvable().length} to approve`, can('members') && `${overdue} dues overdue`].filter(Boolean).join(' · ')}</div></div>
   </div>
   ${showMoney ? `<div class="grid g2">
     <div class="card"><h3>Donations by fund</h3><p class="small muted">Last 30 days</p>${barsH(byFund, money)}</div>
     <div class="card"><h3>New members by month</h3><p class="small muted">Last 6 months</p>${columns(signups)}</div>
   </div>
   <div class="grid g2">
-    <div class="card"><h3>Recent gifts</h3><div class="table-wrap" style="border:0"><table><thead><tr><th>Date</th><th>Donor</th><th>Fund</th><th>Amount</th></tr></thead><tbody>${[...S.donations].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map(d => `<tr><td>${fmtDate(d.date)}</td><td>${esc(d.userId ? nameOf(d.userId) : (d.name || 'Anonymous'))}</td><td>${esc(FUNDS.find(f => f.id === d.fund)?.name)}</td><td class="num">${money(d.amount)}</td></tr>`).join('')}</tbody></table></div></div>
-    <div class="card"><h3>Recently joined</h3>${[...members].sort((a, b) => b.joined.localeCompare(a.joined)).slice(0, 6).map(memberRow).join('')}</div>
+    <div class="card"><h3>Recent gifts</h3><div class="table-wrap" style="border:0"><table><thead><tr><th>Date</th><th>Donor</th><th>Fund</th><th>Amount</th></tr></thead><tbody>${S.donations.filter(counted).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6).map(d => `<tr><td>${fmtDate(d.date)}</td><td>${esc(d.userId ? nameOf(d.userId) : (d.name || 'Anonymous'))}</td><td>${esc(FUNDS.find(f => f.id === d.fund)?.name)}</td><td class="num">${money(d.amount)}</td></tr>`).join('')}</tbody></table></div></div>
+    ${can('members') ? `<div class="card"><h3>Recently joined</h3>${[...members].sort((a, b) => b.joined.localeCompare(a.joined)).slice(0, 6).map(u => memberRow(u)).join('')}</div>` : `<div class="card"><h3>Reports</h3><p class="small muted">Build a board report with the sections you choose and download it as a PDF.</p><a class="btn sm" href="#admin-analytics">Open analytics</a></div>`}
   </div>` : ''}`;
 }
 function barsH(rows, fmt = v => v) {
@@ -1897,17 +1950,21 @@ function barsH(rows, fmt = v => v) {
       <text x="${x + w + 8}" y="${y + 13}" font-size="13" fill="var(--muted)">${fmt(r.value)}</text>
       <rect x="0" y="${i * rowH}" width="${W}" height="${rowH}" fill="transparent" data-tip="${esc(r.label)}: ${esc(fmt(r.value))}"/>`; }).join('')}</svg><div class="tip"></div></div>`;
 }
-function columns(rows) {
-  const W = 520, H = 200, padB = 26, padT = 18, padL = 30;
-  const max = Math.max(4, ...rows.map(r => r.value)), step = Math.ceil(max / 4), top = step * 4;
+const niceStep = v => { const p = Math.pow(10, Math.floor(Math.log10(Math.max(1, v)))); const n = v / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; };
+function columns(rows, o = {}) {
+  const fmt = o.fmt || (v => String(v)), unit = o.unit ?? ' new members';
+  const W = 520, H = 200, padB = 26, padT = 18, padL = o.fmt ? 52 : 30;
+  const max = Math.max(4, ...rows.map(r => r.value)), step = niceStep(max / 4), top = step * Math.ceil(max / step);
+  const ticks = Math.round(top / step);
   const cw = (W - padL) / rows.length, bw = Math.min(46, cw * 0.55), Y = v => H - padB - (H - padB - padT) * v / top;
-  let grid = ''; for (let i = 0; i <= 4; i++) { const y = Y(step * i); grid += `<line x1="${padL}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)" ${i ? 'stroke-dasharray="2 4"' : ''}/><text x="${padL - 8}" y="${y + 4}" text-anchor="end" font-size="11.5" fill="var(--muted)">${step * i}</text>`; }
+  let grid = ''; for (let i = 0; i <= ticks; i++) { const y = Y(step * i); grid += `<line x1="${padL}" x2="${W}" y1="${y}" y2="${y}" stroke="var(--line)" ${i ? 'stroke-dasharray="2 4"' : ''}/><text x="${padL - 8}" y="${y + 4}" text-anchor="end" font-size="11.5" fill="var(--muted)">${fmt(step * i)}</text>`; }
+  const labelEvery = rows.length > 14 ? Math.ceil(rows.length / 8) : 1;
   return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Column chart">${grid}${rows.map((r, i) => {
     const x = padL + cw * i + (cw - bw) / 2, y = Y(r.value), h = H - padB - y, rr = Math.min(4, h / 2, bw / 2), last = i === rows.length - 1;
     return `${h > 0 ? `<path d="M${x} ${H - padB}v-${h - rr}a${rr} ${rr} 0 0 1 ${rr} -${rr}h${bw - 2 * rr}a${rr} ${rr} 0 0 1 ${rr} ${rr}v${h - rr}z" fill="var(--green)" ${last ? '' : 'fill-opacity=".55"'}/>` : ''}
-      <text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="12" fill="var(--muted)">${esc(r.label)}</text>
-      ${last ? `<text x="${x + bw / 2}" y="${y - 6}" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">${r.value}</text>` : ''}
-      <rect x="${padL + cw * i}" y="${padT}" width="${cw}" height="${H - padB - padT}" fill="transparent" data-tip="${esc(r.label)}: ${r.value} new member${r.value === 1 ? '' : 's'}"/>`; }).join('')}</svg><div class="tip"></div></div>`;
+      ${i % labelEvery === 0 || last ? `<text x="${x + bw / 2}" y="${H - 8}" text-anchor="middle" font-size="12" fill="var(--muted)">${esc(r.label)}</text>` : ''}
+      ${last ? `<text x="${x + bw / 2}" y="${y - 6}" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--ink)">${fmt(r.value)}</text>` : ''}
+      <rect x="${padL + cw * i}" y="${padT}" width="${cw}" height="${H - padB - padT}" fill="transparent" data-tip="${esc(r.label)}: ${esc(fmt(r.value))}${o.fmt ? '' : unit.replace(/s$/, r.value === 1 ? '' : 's')}"/>`; }).join('')}</svg><div class="tip"></div></div>`;
 }
 
 /* ================= Content studio ================= */
@@ -2035,26 +2092,41 @@ function aMembers() {
   <div class="card"><label class="check small" style="padding:4px"><input type="checkbox" data-action-change="sel-all" ${list.length && list.every(u => UI.sel?.[u.id]) ? 'checked' : ''}> Select all ${list.length}</label>
     ${list.map(u => memberRow(u, true)).join('') || '<div class="empty">No members match.</div>'}</div>`;
 }
-const PERM_ROWS = [['content', 'Write and publish posts, articles, resources, khutbahs, events'], ['gallery', 'Approve gallery photos'], ['forum', 'Moderate the forum'], ['members', 'Manage members, dues and payments'], ['messages', 'Message and send requests to members'], ['inbox', 'Read the inbox (Ask the Imam, bookings)'], ['site', 'Change prayer times and site settings'], ['roles', 'Make other people admins'], ['integrations', 'Manage connections (domain, Supabase, Resend, Stripe)']];
+const PERM_ROWS = [['analytics', 'Analytics and PDF reports'], ['finance', 'Donations ledger: view gifts and log cash, checks and Zelle'], ['approve', 'Approve donations someone else logged'], ['members', 'Manage members, plans and dues'], ['messages', 'Message and send requests to members'], ['inbox', 'Inbox: Ask the Imam, bookings, contact'], ['content', 'Write and publish posts, articles, resources, khutbahs, events'], ['events', 'RSVPs, class registrations and volunteer shifts'], ['gallery', 'Approve gallery photos'], ['forum', 'Moderate the forum'], ['email', 'Email notifications and outbox'], ['prayer', 'Prayer times and Jumu’ah settings'], ['site', 'Site settings and urgent alerts'], ['roles', 'Assign roles and change permissions'], ['integrations', 'Connections: domain, Supabase, Resend, Stripe']];
+const ROLE_WHO = {
+  superadmin: 'Webmaster or IT lead. One or two trusted people.',
+  executive: 'Board or executive committee: president, vice president, secretary, treasurer. Oversight, money and members, without editing the site.',
+  office: 'Masjid office or administrator. Day-to-day running: members, bookings, alerts, prayer times, logging cash and checks.',
+  imam: 'Imam or religious director. Khutbah summaries, Learn Islam guides, Ask the Imam, prayer times.',
+  editor: 'Communications or media volunteer. News, articles, resources, events and emails.',
+  coordinator: 'Education, youth or sisters’ program lead. Their events, classes and volunteers.',
+  moderator: 'Trusted members who keep the forum and gallery clean.'
+};
 function aTeam() {
-  const staff = S.users.filter(u => roleOf(u) !== 'member').sort((a, b) => ROLES.findIndex(r => r[0] === b.role) - ROLES.findIndex(r => r[0] === a.role));
-  const assignable = ROLES.filter(([k]) => can('roles') || !['admin', 'superadmin'].includes(k));
-  const roleSel = u => (!can('roles') && ['admin', 'superadmin'].includes(u.role)) ? `<span class="chip green">${ROLE_LABEL[u.role]}</span>` : `<select data-action-change="set-role" data-id="${u.id}" style="width:auto;padding:6px 8px;font-size:14px" aria-label="Role for ${esc(u.name)}">${assignable.map(([k, l]) => `<option value="${k}" ${u.role === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
-  return `<div class="card"><h3>Team</h3>${staff.map(u => `<div class="member-row"><span class="avatar">${initials(u.name)}</span><a class="who" href="#admin-member-${u.id}"><strong>${esc(u.name)}</strong><span>${esc(u.email)}${u.status === 'invited' ? ' · invitation sent' : ''}</span></a><div class="chips">${roleSel(u)}</div></div>`).join('')}</div>
-  <form class="card pad-lg form-grid two" data-form="invite"><h3 class="full" style="margin:0">Add a team member</h3><p class="full small muted" style="margin:0">If they already have an account, their role changes right away. Otherwise they get an invitation by email once email is connected.</p>
+  const order = r => ROLES.findIndex(x => x[0] === r);
+  const staff = S.users.filter(u => roleOf(u) !== 'member').sort((a, b) => order(roleOf(b)) - order(roleOf(a)));
+  const editRoles = can('roles');
+  const roleSel = u => !editRoles || u.id === me().id ? `<span class="chip green">${ROLE_LABEL[roleOf(u)]}</span>` : `<select data-action-change="set-role" data-id="${u.id}" style="width:auto;padding:6px 8px;font-size:14px" aria-label="Role for ${esc(u.name)}">${ROLES.map(([k, l]) => `<option value="${k}" ${roleOf(u) === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  const staffRoles = ROLES.slice(1).reverse();
+  return `<div class="card"><h3>Team</h3>${staff.map(u => `<div class="member-row"><span class="avatar">${initials(u.name)}</span><a class="who" href="#admin-member-${u.id}"><strong>${esc(u.name)}</strong><span>${esc(u.title || ROLE_LABEL[roleOf(u)])}${u.status === 'invited' ? ' · invitation sent' : ''}</span></a><div class="chips">${roleSel(u)}</div></div>`).join('')}</div>
+  ${editRoles ? `<form class="card pad-lg form-grid two" data-form="invite"><h3 class="full" style="margin:0">Add a team member</h3><p class="full small muted" style="margin:0">If they already have an account, their role changes right away. Otherwise they get an invitation by email once email is connected.</p>
     <label class="f">Name<input name="name" required></label><label class="f">Email<input name="email" type="email" required></label>
-    <label class="f">Role<select name="role">${assignable.filter(([k]) => k !== 'member').map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
-    <div class="full"><button class="btn" type="submit">Add to team</button></div></form>
-  <div class="card"><h3>What each role can do</h3><div class="table-wrap" style="border:0"><table><thead><tr><th>Permission</th>${ROLES.slice(1).map(r => `<th>${r[1]}</th>`).join('')}</tr></thead><tbody>
-    ${PERM_ROWS.map(([p, l]) => `<tr><td class="wrap">${l}</td>${ROLES.slice(1).map(([r]) => `<td>${PERMS[r].includes(p) ? `<span style="color:var(--ok)">${icon('check')}</span>` : '<span class="muted">–</span>'}</td>`).join('')}</tr>`).join('')}
-  </tbody></table></div></div>`;
+    <label class="f">Role<select name="role">${staffRoles.map(([k, l]) => `<option value="${k}" ${k === 'executive' ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label class="f">Position title <span class="hint">Shown to other staff, e.g. Treasurer</span><input name="title" placeholder="e.g. Treasurer"></label>
+    <div class="full"><button class="btn" type="submit">Add to team</button></div></form>` : '<div class="notice">Only a super admin can add team members or change roles.</div>'}
+  <div class="card"><div class="row between"><h3 style="margin:0">What each role can do</h3>${editRoles ? '<button class="btn ghost sm" data-action="perms-reset">Reset to recommended</button>' : ''}</div>
+    <p class="small muted">${editRoles ? 'Tick or untick to change a role’s access. Changes apply right away. Super admins always have full access.' : 'Set by your super admin.'}</p>
+    <div class="table-wrap" style="border:0"><table class="perm-table"><thead><tr><th>Permission</th>${staffRoles.map(r => `<th>${r[1]}</th>`).join('')}</tr></thead><tbody>
+    ${PERM_ROWS.map(([p, l]) => `<tr><td class="wrap">${l}</td>${staffRoles.map(([r]) => { const on = permsFor(r).includes(p); return `<td>${editRoles && r !== 'superadmin' ? `<input type="checkbox" aria-label="${esc(ROLE_LABEL[r])}: ${esc(l)}" data-action-change="perm" data-role="${r}" data-perm="${p}" ${on ? 'checked' : ''}>` : on ? `<span style="color:var(--ok)">${icon('check')}</span>` : '<span class="muted">–</span>'}</td>`; }).join('')}</tr>`).join('')}
+  </tbody></table></div></div>
+  <div class="card"><h3>Who each role is for</h3>${staffRoles.map(([r, l]) => `<div class="row between small" style="padding:8px 0;border-top:1px solid var(--line);align-items:flex-start;flex-wrap:nowrap"><strong style="min-width:140px">${l}</strong><span class="muted" style="flex:1">${ROLE_WHO[r]}</span></div>`).join('')}</div>`;
 }
 function aMember(u) {
   const gifts = S.donations.filter(d => d.userId === u.id).sort((a, b) => b.date.localeCompare(a.date));
   const topics = S.topics.filter(t => t.authorId === u.id).length, replies = S.topics.reduce((s, t) => s + t.replies.filter(r => r.authorId === u.id).length, 0);
   const evs = S.events.filter(e => e.rsvps.includes(u.id)), progs = S.programs.filter(p => p.regs.includes(u.id)), shifts = S.shifts.filter(s => s.signups.includes(u.id));
   const self = u.id === me().id;
-  const roleLocked = !can('roles') && ['admin', 'superadmin'].includes(u.role);
+  const roleLocked = !can('roles');
   return `<div class="crumbs"><a href="#admin-members">← Members</a></div>
   <div class="card row" style="gap:14px;flex-wrap:nowrap;align-items:center"><span class="avatar" style="width:56px;height:56px;font-size:20px">${initials(u.name)}</span><div style="min-width:0"><div class="chip-row">${u.tier === 'paid' ? '<span class="chip gold">Supporting member</span>' : '<span class="chip">Community member</span>'}${roleOf(u) !== 'member' ? `<span class="chip green">${ROLE_LABEL[roleOf(u)]}</span>` : ''}${u.status === 'suspended' ? '<span class="chip bad">Suspended</span>' : u.status === 'invited' ? '<span class="chip warn">Invited</span>' : '<span class="chip ok">Active</span>'}</div>
     <div class="small muted" style="margin-top:6px">Joined ${fmtDate(u.joined, { month: 'long', day: 'numeric', year: 'numeric' })} · signs in with ${esc(u.provider)}</div></div></div>
@@ -2065,7 +2137,8 @@ function aMember(u) {
       <label class="f">Plan<select name="tier"><option value="free" ${u.tier === 'free' ? 'selected' : ''}>Free community member</option><option value="paid" ${u.tier === 'paid' ? 'selected' : ''}>Supporting member</option></select></label>
       <label class="f">Dues<select name="dues"><option value="" ${!u.dues ? 'selected' : ''}>Not applicable</option><option value="active" ${u.dues === 'active' ? 'selected' : ''}>Paid</option><option value="overdue" ${u.dues === 'overdue' ? 'selected' : ''}>Overdue</option></select></label>
       <label class="f">Renews on<input type="date" name="renews" value="${u.renews || ''}"></label>
-      <label class="f">Role${roleLocked ? `<input value="${ROLE_LABEL[u.role]}" disabled>` : `<select name="role" ${self ? 'disabled' : ''}>${ROLES.filter(([k]) => can('roles') || !['admin', 'superadmin'].includes(k)).map(([k, l]) => `<option value="${k}" ${roleOf(u) === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`}${self ? '<span class="hint">You can’t change your own role.</span>' : ''}</label>
+      <label class="f">Role${roleLocked ? `<input value="${ROLE_LABEL[roleOf(u)]}" disabled><span class="hint">Only a super admin can change roles.</span>` : `<select name="role" ${self ? 'disabled' : ''}>${ROLES.map(([k, l]) => `<option value="${k}" ${roleOf(u) === k ? 'selected' : ''}>${l}</option>`).join('')}</select>`}${self && !roleLocked ? '<span class="hint">You can’t change your own role.</span>' : ''}</label>
+      <label class="f">Position title<input name="title" value="${esc(u.title || '')}" placeholder="e.g. Treasurer" ${roleLocked ? 'disabled' : ''}></label>
       <label class="f">Account<select name="status" ${self ? 'disabled' : ''}><option value="active" ${u.status !== 'suspended' ? 'selected' : ''}>Active</option><option value="suspended" ${u.status === 'suspended' ? 'selected' : ''}>Suspended (can read, can’t post)</option></select></label>
       <label class="check full"><input type="checkbox" name="volunteer" ${u.volunteer ? 'checked' : ''}> On the volunteer list</label>
       <label class="f full">Private notes <span class="hint">Only staff with member access see these</span><textarea name="notes" style="min-height:80px">${esc(u.notes || '')}</textarea></label>
@@ -2073,10 +2146,10 @@ function aMember(u) {
     <div class="stack">
       <div class="card stack-sm"><h3 style="margin:0">Actions</h3>
         <button class="btn ghost block" data-action="msg-member" data-id="${u.id}">${icon('send')} Send a message</button>
-        <button class="btn ghost block" data-action="record-payment" data-id="${u.id}">${icon('heart')} Record a cash or check payment</button>
+        ${can('finance') ? `<button class="btn ghost block" data-action="log-donation" data-id="${u.id}">${icon('heart')} Log a cash, check or Zelle gift</button>` : ''}
         ${self ? '' : `<button class="btn ghost block" data-action="remove-member" data-id="${u.id}">Remove member</button>`}</div>
-      <div class="card"><h3>Giving</h3><p class="small" style="margin:0 0 8px">Total: <strong class="num">${money(gifts.reduce((s, d) => s + d.amount, 0))}</strong> in ${gifts.length} gift${gifts.length === 1 ? '' : 's'}</p>
-        ${gifts.slice(0, 5).map(d => `<div class="row between small" style="padding:6px 0;border-top:1px solid var(--line)"><span>${fmtDate(d.date)} · ${esc(FUNDS.find(f => f.id === d.fund)?.name)}${d.method && d.method !== 'Card' ? ` · ${esc(d.method)}` : ''}</span><strong class="num">${money(d.amount)}</strong></div>`).join('')}</div>
+      <div class="card"><h3>Giving</h3><p class="small" style="margin:0 0 8px">Total: <strong class="num">${money(gifts.filter(counted).reduce((s, d) => s + d.amount, 0))}</strong> in ${gifts.filter(counted).length} gift${gifts.filter(counted).length === 1 ? '' : 's'}${gifts.some(d => d.status === 'pending') ? ' · some awaiting approval' : ''}</p>
+        ${gifts.slice(0, 5).map(d => `<div class="row between small" style="padding:6px 0;border-top:1px solid var(--line)"><span>${fmtDate(d.date)} · ${esc(FUNDS.find(f => f.id === d.fund)?.name)}${d.method && d.method !== 'Card' ? ` · ${esc(d.method)}` : ''}</span><strong class="num">${money(d.amount)}${counted(d) ? '' : ` <span class="chip ${d.status === 'pending' ? 'warn' : ''}">${d.status}</span>`}</strong></div>`).join('')}</div>
       <div class="card"><h3>Activity</h3><ul class="small prose" style="margin:0"><li>${topics} forum topics, ${replies} replies</li><li>Events: ${evs.map(e => esc(e.title)).join(', ') || 'none'}</li><li>Classes: ${progs.map(p => esc(p.title)).join(', ') || 'none'}</li><li>Volunteering: ${shifts.map(s => esc(s.title)).join(', ') || 'none'}</li><li>Photos shared: ${S.gallery.filter(g => g.by === u.id).length}</li></ul></div>
       <div class="card"><h3>Email preferences</h3><p class="tiny muted">Set by the member.</p><div class="chip-row">${PREF_KEYS.map(([k, l]) => `<span class="chip ${(u.prefs || {})[k] !== false ? 'ok' : ''}">${(u.prefs || {})[k] !== false ? '✓' : '✕'} ${l}</span>`).join('')}</div></div>
     </div>
@@ -2244,7 +2317,6 @@ Object.assign(A, {
   },
   'add-member': () => modal('Add a member', `<form class="form-grid" data-form="add-member"><label class="f">Full name<input name="name" required></label><label class="f">Email<input name="email" type="email" required></label><label class="f">Phone<input name="phone"></label><label class="f">Plan<select name="tier"><option value="free">Free community member</option><option value="paid">Supporting member</option></select></label><label class="check"><input type="checkbox" name="welcome" checked> Send a welcome email with a sign-in link (queued until Resend is connected)</label><button class="btn block" type="submit">Add member</button></form>`),
   'msg-member': el => modal('Message ' + nameOf(el.dataset.id), msgForm('user', el.dataset.id)),
-  'record-payment': el => modal('Record a payment', `<form class="form-grid" data-form="record-payment" data-id="${el.dataset.id}"><p class="small muted" style="margin:0">For cash or checks received in person. It adds to the member’s giving history and receipts.</p><label class="f">What for<select name="fund"><option value="dues">Supporting member dues</option>${FUNDS.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}</select></label><div class="form-grid two"><label class="f">Amount ($)<input name="amount" type="number" min="1" step="0.01" required></label><label class="f">Paid by<select name="method"><option>Cash</option><option>Check</option><option>Zelle</option><option>Other</option></select></label></div><label class="f">Date<input type="date" name="date" value="${nowIso()}" max="${nowIso()}"></label><button class="btn block" type="submit">Record payment</button></form>`),
   'remove-member': el => modal('Remove ' + nameOf(el.dataset.id) + '?', `<p>Their account is deleted and they’re removed from events, classes and shifts. Past donations stay in your records under their name.</p><div class="row"><button class="btn danger" data-action="remove-yes" data-id="${el.dataset.id}">Remove member</button><button class="btn ghost" data-action="close-modal">Cancel</button></div>`),
   'remove-yes': el => { const u = userById(el.dataset.id); S.donations.forEach(d => { if (d.userId === u.id) { d.userId = null; d.name = u.name; } }); S.events.forEach(e => e.rsvps = e.rsvps.filter(x => x !== u.id)); S.programs.forEach(p => p.regs = p.regs.filter(x => x !== u.id)); S.shifts.forEach(s => s.signups = s.signups.filter(x => x !== u.id)); S.users = S.users.filter(x => x !== u); closeModal(); location.hash = 'admin-members'; commit(u.name + ' was removed.'); },
   mod: el => { const t = S.topics.find(x => x.id === el.dataset.id); const v = el.dataset.v; if (v === 'pin') t.pinned = !t.pinned; if (v === 'lock') t.locked = !t.locked; if (v === 'clear') t.reports = 0; if (v === 'delete') { S.topics = S.topics.filter(x => x !== t); if (route().startsWith('topic')) location.hash = 'community'; } commit(v === 'delete' ? 'Topic deleted.' : 'Updated.'); },
@@ -2272,7 +2344,7 @@ function refreshCover() {
   if (!UI.ed.cover && next && next.dataset.action === 'ed-cover-clear') next.remove();
 }
 Object.assign(CHANGE, {
-  'set-role': el => { const u = userById(el.dataset.id); if (u.id === me().id) { toast('You can’t change your own role.'); return render(false); } u.role = el.value; commit(`${u.name} is now ${el.value === 'member' ? 'a member' : (/^[aeiou]/i.test(ROLE_LABEL[el.value]) ? 'an ' : 'a ') + ROLE_LABEL[el.value].toLowerCase()}.`); },
+  'set-role': el => { const u = userById(el.dataset.id); if (!can('roles')) return toast('Only a super admin can change roles.'); if (u.id === me().id) { toast('You can’t change your own role.'); return render(false); } u.role = el.value; commit(`${u.name} is now ${el.value === 'member' ? 'a member' : (/^[aeiou]/i.test(ROLE_LABEL[el.value]) ? 'an ' : 'a ') + ROLE_LABEL[el.value].toLowerCase()}.`); },
   sel: el => { UI.sel = { ...(UI.sel || {}), [el.dataset.id]: el.checked }; render(false); },
   'sel-all': el => { UI.sel = {}; if (el.checked) $$('[data-action-change="sel"]').forEach(c => UI.sel[c.dataset.id] = true); render(false); },
   'ed-cover': async el => { const src = await readImage(el.files[0]); if (src) { UI.ed.cover = src; refreshCover(); } },
@@ -2345,21 +2417,18 @@ Object.assign(F, {
   async 'member-save'(fd, form) {
     const u = userById(form.dataset.id);
     u.name = fd.get('name').trim(); u.email = fd.get('email').trim(); u.phone = fd.get('phone'); u.tier = fd.get('tier'); u.dues = u.tier === 'paid' ? (fd.get('dues') || 'active') : null; u.renews = u.tier === 'paid' ? (fd.get('renews') || addDays(nowIso(), 30)) : null;
-    if (fd.get('role') && u.id !== me().id) u.role = fd.get('role');
+    if (can('roles') && fd.get('role') && u.id !== me().id) u.role = fd.get('role');
+    if (can('roles')) u.title = (fd.get('title') || '').trim();
     if (fd.get('status') && u.id !== me().id) u.status = fd.get('status');
     u.volunteer = !!fd.get('volunteer'); u.notes = fd.get('notes');
     commit('Saved.');
   },
-  async 'record-payment'(fd, form) {
-    const u = userById(form.dataset.id), fund = fd.get('fund'), amount = +fd.get('amount');
-    S.donations.push({ id: uid('d'), userId: u.id, fund: fund === 'dues' ? 'general' : fund, amount, freq: 'once', date: fd.get('date') || nowIso(), method: fd.get('method'), dues: fund === 'dues' });
-    if (fund === 'dues') { u.tier = 'paid'; u.dues = 'active'; u.renews = addDays(fd.get('date') || nowIso(), 30); }
-    closeModal(); commit(`${money(amount)} ${fd.get('method').toLowerCase()} payment recorded.`);
-  },
+
   async invite(fd, form) {
     const email = fd.get('email').trim().toLowerCase(), role = fd.get('role');
     let u = S.users.find(x => x.email.toLowerCase() === email);
-    if (u) { u.role = role; } else { u = { id: uid('u'), name: fd.get('name').trim(), email, phone: '', tier: 'free', role, status: 'invited', joined: nowIso(), provider: 'Invite', dues: null, renews: null, notes: '', prefs: { announcements: true, news: true, articles: true, events: true, khutbah: true, alerts: true } }; S.users.push(u); S.emails.unshift({ id: uid('em'), date: nowIso(), kind: 'message', subject: `You’re invited to help run the ${S.settings.name} website`, excerpt: `${me().name} added you as ${ROLE_LABEL[role].toLowerCase()}. Sign in with this email address to get started.`, link: '#account', count: 1, status: 'waiting' }); }
+    const title = (fd.get('title') || '').trim();
+    if (u) { u.role = role; if (title) u.title = title; } else { u = { id: uid('u'), name: fd.get('name').trim(), email, phone: '', tier: 'free', role, title, status: 'invited', joined: nowIso(), provider: 'Invite', dues: null, renews: null, notes: '', prefs: { announcements: true, news: true, articles: true, events: true, khutbah: true, alerts: true } }; S.users.push(u); S.emails.unshift({ id: uid('em'), date: nowIso(), kind: 'message', subject: `You’re invited to help run the ${S.settings.name} website`, excerpt: `${me().name} added you as ${ROLE_LABEL[role].toLowerCase()}. Sign in with this email address to get started.`, link: '#account', count: 1, status: 'waiting' }); }
     form.reset(); commit(`${u.name} added as ${ROLE_LABEL[role].toLowerCase()}.${u.status === 'invited' ? ' Invitation email is queued.' : ''}`);
   },
   async 'imam-reply'(fd, form) { const i = S.inbox.find(x => x.id === form.dataset.id); i.reply = fd.get('reply'); i.status = 'answered'; closeModal(); commit('Answer sent.'); },
@@ -2411,6 +2480,314 @@ document.addEventListener('click', e => {
 document.addEventListener('input', e => { const ed = e.target.closest?.('.rte'); if (ed) ed.classList.toggle('is-empty', !ed.textContent.trim() && !ed.querySelector('li')); });
 document.addEventListener('focusin', e => { if (e.target.closest?.('.rte')) { try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (err) {} } });
 document.addEventListener('paste', e => { const ed = e.target.closest?.('.rte'); if (!ed) return; e.preventDefault(); const text = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertText', false, text); });
+/* ================= Donations ledger (two-person approval) ================= */
+const METHODS = ['Cash', 'Check', 'Zelle', 'Bank transfer', 'Money order', 'Other'];
+const donorName = d => d.userId ? nameOf(d.userId) : (d.name || 'Anonymous');
+const fundName = id => id === 'dues' ? 'Supporting member dues' : (FUNDS.find(f => f.id === id)?.name || id);
+const STATUS_CHIP = { approved: '<span class="chip ok">Approved</span>', pending: '<span class="chip warn">Waiting for approval</span>', rejected: '<span class="chip bad">Rejected</span>', voided: '<span class="chip">Voided</span>' };
+const who = id => id ? `${esc(nameOf(id))}${userById(id)?.title ? `, ${esc(userById(id).title)}` : ''}` : '';
+function logForm(prefillUser) {
+  const members = S.users.filter(u => u.status !== 'invited').sort((a, b) => a.name.localeCompare(b.name));
+  const pre = prefillUser ? userById(prefillUser) : null;
+  return `<form class="form-grid two" data-form="log-donation">
+    <label class="f full">Donor <span class="hint">Start typing a member’s name, or enter anyone else (for example “Jumu’ah collection box” or “Anonymous”)</span><input name="donor" list="donor-list" required value="${esc(pre?.name || '')}" placeholder="Name"><datalist id="donor-list">${members.map(u => `<option value="${esc(u.name)}">`).join('')}<option value="Jumu’ah collection box"><option value="Anonymous"></datalist></label>
+    <label class="f">Amount ($)<input name="amount" type="number" min="1" step="0.01" required inputmode="decimal"></label>
+    <label class="f">Fund<select name="fund">${FUNDS.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}<option value="dues">Supporting member dues</option></select></label>
+    <label class="f">How it was paid<select name="method">${METHODS.map(m => `<option>${m}</option>`).join('')}</select></label>
+    <label class="f">Date received<input type="date" name="date" value="${nowIso()}" max="${nowIso()}" required></label>
+    <label class="f full">Reference <span class="hint">Check number, Zelle confirmation, envelope or deposit slip number</span><input name="ref" placeholder="e.g. Check #2041"></label>
+    <label class="f full">Notes for the approver<textarea name="note" style="min-height:70px" placeholder="Who counted it, where it’s kept, anything unusual"></textarea></label>
+    <label class="f full">Photo of the check or deposit slip <span class="hint">Optional. Only finance staff can see it.</span><input type="file" name="photo" accept="image/*"></label>
+    <div class="notice full">${icon('shield')}<span>This gift won’t count in totals or the donor’s receipts until a different person with approval rights approves it.</span></div>
+    <div class="full"><button class="btn" type="submit">Log for approval</button></div></form>`;
+}
+function ledgerRange(k) { const t = nowIso(); return k === '30' ? addDays(t, -30) : k === '90' ? addDays(t, -90) : k === '365' ? addDays(t, -365) : '0000-01-01'; }
+function aFinance() {
+  const f = UI.lf || {}, st = f.status || 'all', src = f.source || 'all', fund = f.fund || 'all', rng = f.range || '90', q = (UI.lq2 || '').toLowerCase();
+  const from = ledgerRange(rng);
+  const pending = S.donations.filter(d => d.status === 'pending').sort((a, b) => a.loggedAt.localeCompare(b.loggedAt));
+  const y0 = nowIso().slice(0, 4) + '-01-01', m0 = nowIso().slice(0, 7);
+  const ok = S.donations.filter(counted);
+  const sum = arr => arr.reduce((s, d) => s + d.amount, 0);
+  const list = S.donations.filter(d => d.date >= from && (st === 'all' || (d.status || 'approved') === st) && (src === 'all' || (d.source || 'online') === src) && (fund === 'all' || d.fund === fund) && (!q || (donorName(d) + ' ' + (d.ref || '') + ' ' + d.method).toLowerCase().includes(q))).sort((a, b) => b.date.localeCompare(a.date));
+  const sel = (key, opts, cur) => `<select data-action-change="lf" data-k="${key}" style="width:auto;padding:7px 10px;font-size:14px" aria-label="${key}">${opts.map(([v, l]) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${l}</option>`).join('')}</select>`;
+  return `<div class="kpis">
+    <div class="kpi"><div class="k">Approved this month</div><div class="v">${money(sum(ok.filter(d => d.date.slice(0, 7) === m0)))}</div><div class="d">${ok.filter(d => d.date.slice(0, 7) === m0).length} gifts</div></div>
+    <div class="kpi ${pending.length ? 'attn' : ''}"><div class="k">Waiting for approval</div><div class="v">${pending.length}</div><div class="d">${money(sum(pending))} not yet counted</div></div>
+    <div class="kpi"><div class="k">Online, this year</div><div class="v">${money(sum(ok.filter(d => d.date >= y0 && (d.source || 'online') === 'online')))}</div><div class="d">Card payments through the site</div></div>
+    <div class="kpi"><div class="k">Logged by staff, this year</div><div class="v">${money(sum(ok.filter(d => d.date >= y0 && d.source === 'offline')))}</div><div class="d">Cash, checks, Zelle and other</div></div>
+  </div>
+  <div class="card"><h3>Waiting for approval</h3><p class="small muted">Two-person rule: whoever logs a gift can’t approve it. Another person with approval rights checks it against the cash, check or bank record.</p>
+    ${pending.length ? pending.map(d => { const mine = d.loggedBy === me().id; return `<div class="queue-item"><div class="row between"><div><strong class="num">${money(d.amount)}</strong> · ${esc(fundName(d.fund))} · ${esc(d.method)}</div><span class="small muted">Received ${fmtDate(d.date)}</span></div>
+      <div class="small">From <strong>${esc(donorName(d))}</strong>${d.ref ? ` · ${esc(d.ref)}` : ''}</div>
+      <div class="small muted">Logged by ${who(d.loggedBy)} on ${fmtDate(d.loggedAt, { month: 'short', day: 'numeric' })}</div>
+      ${d.note ? `<div class="small" style="background:var(--surface-2);padding:8px 10px;border-radius:8px">${esc(d.note)}</div>` : ''}${d.photo ? `<button class="link-btn small" style="justify-self:start" data-action="ledger-photo" data-id="${d.id}">View attached photo</button>` : ''}
+      <div class="row">${can('approve') && !mine ? `<button class="btn sm" data-action="ledger-approve" data-id="${d.id}">${icon('check')} Approve</button><button class="btn ghost sm" data-action="ledger-reject" data-id="${d.id}">Reject</button>` : `<span class="chip">${mine ? 'You logged this, so someone else must approve it' : 'An executive will review this'}</span>`}</div></div>`; }).join('') : '<div class="empty">Nothing waiting. Everything logged has been reviewed.</div>'}
+  </div>
+  <div class="card"><h3>Log a gift received outside the site</h3><p class="small muted">For cash, checks, Zelle, bank transfers and the Jumu’ah collection box.</p>${logForm()}</div>
+  <div class="card"><div class="row between" style="margin-bottom:10px"><h3 style="margin:0">Ledger</h3><button class="btn ghost sm" data-action="ledger-csv">Download CSV</button></div>
+    <div class="row" style="margin-bottom:10px">${sel('range', [['30', 'Last 30 days'], ['90', 'Last 90 days'], ['365', 'Last 12 months'], ['all', 'All time']], rng)}${sel('status', [['all', 'Any status'], ['approved', 'Approved'], ['pending', 'Waiting'], ['rejected', 'Rejected'], ['voided', 'Voided']], st)}${sel('source', [['all', 'Online and offline'], ['online', 'Online'], ['offline', 'Logged by staff']], src)}${sel('fund', [['all', 'All funds'], ...FUNDS.map(x => [x.id, x.name])], fund)}
+      <input type="search" placeholder="Search donor or reference" value="${esc(UI.lq2 || '')}" data-input="lq2" style="flex:1;min-width:180px" aria-label="Search the ledger"></div>
+    <p class="small muted" style="margin:0 0 8px">${list.length} entries · ${money(sum(list.filter(counted)))} approved</p>
+    <div class="table-wrap"><table><thead><tr><th>Date</th><th>Donor</th><th>Fund</th><th>Method</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>
+    ${list.slice(0, UI.lmore ? 1000 : 60).map(d => `<tr><td>${fmtDate(d.date, { month: 'short', day: 'numeric', year: 'numeric' })}</td><td>${esc(donorName(d))}</td><td>${esc(fundName(d.fund))}</td><td>${esc(d.method || 'Card')}${d.source === 'offline' ? '' : ' <span class="tiny muted">online</span>'}</td><td class="num">${money(d.amount)}</td><td>${STATUS_CHIP[d.status || 'approved']}</td><td><button class="link-btn small" data-action="ledger-detail" data-id="${d.id}">Details</button></td></tr>`).join('')}
+    </tbody></table></div>
+    ${list.length > 60 && !UI.lmore ? `<div style="margin-top:10px"><button class="btn ghost sm" data-action="ledger-more">Show all ${list.length}</button></div>` : ''}
+  </div>`;
+}
+function downloadFile(name, text, type) {
+  try { const url = URL.createObjectURL(new Blob([text], { type })); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); return true; }
+  catch (e) { return false; }
+}
+const csvRow = r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',');
+Object.assign(A, {
+  'log-donation': el => modal('Log a gift received outside the site', logForm(el.dataset.id)),
+  'ledger-more': () => { UI.lmore = true; render(false); },
+  'ledger-photo': el => modal('Attached photo', `<img src="${S.donations.find(d => d.id === el.dataset.id).photo}" alt="Check or deposit slip" style="border-radius:10px;width:100%">`),
+  'ledger-approve': el => { const d = S.donations.find(x => x.id === el.dataset.id); if (d.loggedBy === me().id) return toast('Someone else must approve a gift you logged.'); d.status = 'approved'; d.approvedBy = me().id; d.approvedAt = nowIso();
+    if (d.dues && d.userId) { const u = userById(d.userId); if (u) { u.tier = 'paid'; u.dues = 'active'; u.renews = addDays(d.date, 30); } }
+    commit(`Approved. ${money(d.amount)} from ${donorName(d)} now counts in totals${d.userId ? ' and their receipts' : ''}.`); },
+  'ledger-reject': el => modal('Reject this entry?', `<form class="form-grid" data-form="ledger-reject" data-id="${el.dataset.id}"><label class="f">Reason <span class="hint">The person who logged it will see this</span><textarea name="reason" required placeholder="e.g. Amount doesn’t match the deposit slip"></textarea></label><button class="btn danger block" type="submit">Reject entry</button></form>`),
+  'ledger-void': el => modal('Void this gift?', `<form class="form-grid" data-form="ledger-void" data-id="${el.dataset.id}"><p class="small muted" style="margin:0">Voiding removes it from totals and receipts but keeps it in the ledger history.</p><label class="f">Reason<textarea name="reason" required placeholder="e.g. Check returned by the bank"></textarea></label><button class="btn danger block" type="submit">Void gift</button></form>`),
+  'ledger-detail': el => { const d = S.donations.find(x => x.id === el.dataset.id); const st = d.status || 'approved';
+    const trail = [d.source === 'offline' ? `Logged by ${who(d.loggedBy)} on ${fmtDate(d.loggedAt, { month: 'long', day: 'numeric', year: 'numeric' })}` : 'Paid online by card through the site', d.approvedBy && `Approved by ${who(d.approvedBy)} on ${fmtDate(d.approvedAt, { month: 'long', day: 'numeric', year: 'numeric' })}`, d.rejectedBy && `Rejected by ${who(d.rejectedBy)}: ${esc(d.reason)}`, d.voidedBy && `Voided by ${who(d.voidedBy)}: ${esc(d.voidReason)}`].filter(Boolean);
+    modal('Gift details', `<div class="stack-sm"><div class="row between"><strong class="num" style="font-size:22px">${money(d.amount)}</strong>${STATUS_CHIP[st]}</div>
+      <div class="small">${esc(donorName(d))} · ${esc(fundName(d.fund))} · ${esc(d.method || 'Card')}${d.freq && d.freq !== 'once' ? ' · ' + d.freq : ''}</div><div class="small muted">Received ${fmtLong(d.date)}${d.ref ? ' · ' + esc(d.ref) : ''}</div>
+      ${d.note ? `<div class="small" style="background:var(--surface-2);padding:8px 10px;border-radius:8px">${esc(d.note)}</div>` : ''}${d.photo ? `<img src="${d.photo}" alt="" style="border-radius:10px">` : ''}
+      <h4 style="margin:8px 0 0">History</h4><ul class="small prose" style="margin:0">${trail.map(t => `<li>${t}</li>`).join('')}</ul>
+      ${st === 'pending' && can('approve') && d.loggedBy !== me().id ? `<div class="row"><button class="btn sm" data-action="ledger-approve" data-id="${d.id}">Approve</button><button class="btn ghost sm" data-action="ledger-reject" data-id="${d.id}">Reject</button></div>` : ''}
+      ${st === 'approved' && can('approve') ? `<div><button class="btn ghost sm" data-action="ledger-void" data-id="${d.id}">Void this gift</button></div>` : ''}</div>`); },
+  'ledger-csv': () => { const f = UI.lf || {}; const from = ledgerRange(f.range || '90'); const rows = S.donations.filter(d => d.date >= from).sort((a, b) => a.date.localeCompare(b.date));
+    const csv = [csvRow(['Date', 'Donor', 'Fund', 'Method', 'Source', 'Amount', 'Frequency', 'Status', 'Reference', 'Logged by', 'Approved by']), ...rows.map(d => csvRow([d.date, donorName(d), fundName(d.fund), d.method || 'Card', d.source || 'online', d.amount, d.freq || 'once', d.status || 'approved', d.ref || '', d.loggedBy ? nameOf(d.loggedBy) : '', d.approvedBy ? nameOf(d.approvedBy) : '']))].join('\n');
+    if (downloadFile(`AMJ-donations-${nowIso()}.csv`, csv, 'text/csv')) toast('Ledger downloaded.'); else toast('Downloads aren’t allowed here.'); }
+});
+Object.assign(CHANGE, { lf: el => { UI.lf = { ...(UI.lf || {}), [el.dataset.k]: el.value }; UI.lmore = false; render(false); } });
+Object.assign(F, {
+  async 'log-donation'(fd, form) {
+    const amount = Math.round(+fd.get('amount') * 100) / 100; if (!(amount > 0)) return toast('Enter the amount received.');
+    const name = fd.get('donor').trim(); const u = S.users.find(x => x.name.toLowerCase() === name.toLowerCase());
+    const fund = fd.get('fund'); const photo = await readImage(fd.get('photo'), 1400);
+    const d = { id: uid('d'), userId: u?.id || null, name: u ? null : name, fund: fund === 'dues' ? 'general' : fund, dues: fund === 'dues', amount, freq: 'once', date: fd.get('date') || nowIso(), method: fd.get('method'), source: 'offline', status: 'pending', ref: fd.get('ref').trim(), note: fd.get('note').trim(), photo, loggedBy: me().id, loggedAt: nowIso() };
+    S.donations.push(d); closeModal(); form.reset();
+    commit(`Logged ${money(amount)} from ${donorName(d)}. It counts once another approver signs off.`);
+  },
+  async 'ledger-reject'(fd, form) { const d = S.donations.find(x => x.id === form.dataset.id); d.status = 'rejected'; d.rejectedBy = me().id; d.rejectedAt = nowIso(); d.reason = fd.get('reason').trim(); closeModal(); commit('Entry rejected.'); },
+  async 'ledger-void'(fd, form) { const d = S.donations.find(x => x.id === form.dataset.id); d.status = 'voided'; d.voidedBy = me().id; d.voidedAt = nowIso(); d.voidReason = fd.get('reason').trim(); closeModal(); commit('Gift voided. It no longer counts in totals.'); }
+});
+
+/* ================= Analytics ================= */
+const RANGE_PRESETS = [['month', 'This month'], ['30', 'Last 30 days'], ['90', 'Last 90 days'], ['year', 'This year'], ['12m', 'Last 12 months'], ['custom', 'Custom']];
+function getRange() {
+  const r = UI.ar || { preset: '30' }, t = nowIso();
+  let from = r.from, to = r.to || t;
+  if (r.preset === 'month') from = t.slice(0, 8) + '01';
+  if (r.preset === '30') from = addDays(t, -29);
+  if (r.preset === '90') from = addDays(t, -89);
+  if (r.preset === 'year') from = t.slice(0, 4) + '-01-01';
+  if (r.preset === '12m') from = addDays(t, -364);
+  if (r.preset !== 'custom') to = t;
+  from = from || addDays(t, -29); if (from > to) [from, to] = [to, from];
+  const days = Math.round((dIso(to) - dIso(from)) / 86400000) + 1;
+  return { from, to, days, prevFrom: addDays(from, -days), prevTo: addDays(from, -1), label: `${fmtDate(from, { month: 'short', day: 'numeric', year: 'numeric' })} – ${fmtDate(to, { month: 'short', day: 'numeric', year: 'numeric' })}` };
+}
+const inR = (iso, a, b) => iso >= a && iso <= b;
+function analyticsData(R) {
+  const sum = arr => arr.reduce((s, d) => s + d.amount, 0);
+  const gifts = S.donations.filter(d => counted(d) && inR(d.date, R.from, R.to));
+  const prev = S.donations.filter(d => counted(d) && inR(d.date, R.prevFrom, R.prevTo));
+  const donors = new Set(gifts.map(d => d.userId || ('n:' + (d.name || 'anon'))));
+  const total = sum(gifts), ptotal = sum(prev);
+  const recurring = sum(gifts.filter(d => d.freq && d.freq !== 'once'));
+  const offline = sum(gifts.filter(d => d.source === 'offline'));
+  const firstGift = S.donations.reduce((m, d) => d.date < m ? d.date : m, '9999'), firstJoin = S.users.reduce((m, u) => u.joined < m ? u.joined : m, '9999');
+  const pct = (a, b, first) => (b && R.prevFrom >= first) ? Math.round((a - b) / b * 100) : null;
+  // series
+  const weekly = R.days <= 62, series = [];
+  if (weekly) { for (let s = R.from; s <= R.to; s = addDays(s, 7)) { const e = addDays(s, 6) > R.to ? R.to : addDays(s, 6); series.push({ label: fmtDate(s, { month: 'short', day: 'numeric' }), value: sum(gifts.filter(d => inR(d.date, s, e))) }); } }
+  else { let m = R.from.slice(0, 7); const end = R.to.slice(0, 7); while (m <= end) { series.push({ label: new Date(m + '-15T12:00:00Z').toLocaleDateString('en-US', { month: 'short', year: R.days > 370 ? '2-digit' : undefined, timeZone: 'UTC' }), value: sum(gifts.filter(d => d.date.slice(0, 7) === m)) }); const [y, mo] = m.split('-').map(Number); m = new Date(Date.UTC(y, mo, 1)).toISOString().slice(0, 7); } }
+  const byFund = [...FUNDS.map(f => ({ label: f.name, value: sum(gifts.filter(d => d.fund === f.id)) }))].filter(x => x.value).sort((a, b) => b.value - a.value);
+  const methods = [...new Set(gifts.map(d => d.method || 'Card'))];
+  const byMethod = methods.map(m => ({ label: m === 'Card' ? 'Card (online)' : m, value: sum(gifts.filter(d => (d.method || 'Card') === m)) })).sort((a, b) => b.value - a.value);
+  const donorTotals = {}; gifts.forEach(d => { const k = d.userId || null; if (!k) return; donorTotals[k] = donorTotals[k] || { name: nameOf(k), gifts: 0, total: 0 }; donorTotals[k].gifts++; donorTotals[k].total += d.amount; });
+  const topDonors = Object.values(donorTotals).sort((a, b) => b.total - a.total).slice(0, 10);
+  // members
+  const users = S.users.filter(u => u.status !== 'invited');
+  const paid = users.filter(u => u.tier === 'paid');
+  const newM = users.filter(u => inR(u.joined, R.from, R.to)), prevNew = users.filter(u => inR(u.joined, R.prevFrom, R.prevTo));
+  const duesCollected = sum(gifts.filter(d => d.dues));
+  const months = []; for (let i = 5; i >= 0; i--) { const d = new Date(R.to + 'T12:00:00Z'); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - i); months.push(d.toISOString().slice(0, 7)); }
+  const joinSeries = months.map(k => ({ label: new Date(k + '-15T12:00:00Z').toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }), value: users.filter(u => u.joined.slice(0, 7) === k).length }));
+  const providers = ['Google', 'Facebook', 'Email', 'Added by staff'].map(p => ({ label: p, value: users.filter(u => u.provider === p).length })).filter(x => x.value);
+  // engagement
+  const evs = S.events.filter(e => inR(e.date, R.from, addDays(R.to, 60))).sort((a, b) => a.date.localeCompare(b.date)).map(e => [e.title, fmtDate(e.date), e.rsvps.length + (e.capacity ? ' / ' + e.capacity : '')]);
+  const progs = S.programs.map(p => [p.title, p.audience, p.regs.length]);
+  const shifts = S.shifts.map(s => [s.title, `${s.signups.length} / ${s.slots}`, Math.round(s.signups.length / s.slots * 100) + '%']);
+  const topics = S.topics.filter(t => inR(t.date, R.from, R.to)).length, replies = S.topics.reduce((s, t) => s + t.replies.filter(r => inR(r.date, R.from, R.to)).length, 0);
+  const photos = S.gallery.filter(g => inR(g.date, R.from, R.to));
+  const imamQ = S.inbox.filter(i => i.kind === 'imam' && inR(i.date, R.from, R.to));
+  const bookings = S.inbox.filter(i => i.kind === 'booking' && inR(i.date, R.from, R.to));
+  // communications
+  const msgs = S.messages.filter(m => inR(m.date, R.from, R.to));
+  const reqs = msgs.filter(m => m.action);
+  const emails = S.emails.filter(e => inR(e.date, R.from, R.to));
+  const active = users.filter(u => u.status === 'active');
+  const subs = PREF_KEYS.map(([k, l]) => ({ label: l, value: active.filter(u => (u.prefs || {})[k] !== false).length }));
+  return {
+    giving: { total, ptotal, delta: pct(total, ptotal, firstGift), prevComplete: R.prevFrom >= firstGift, count: gifts.length, pcount: prev.length, donors: donors.size, avg: gifts.length ? total / gifts.length : 0, recurringPct: total ? Math.round(recurring / total * 100) : 0, offlinePct: total ? Math.round(offline / total * 100) : 0, zakat: sum(gifts.filter(d => d.fund === 'zakat' || d.fund === 'fitr')), pending: S.donations.filter(d => d.status === 'pending').length },
+    series, weekly, byFund, byMethod, topDonors,
+    members: { total: users.length, paid: paid.length, free: users.length - paid.length, newCount: newM.length, prevNew: prevNew.length, delta: pct(newM.length, prevNew.length, firstJoin), overdue: users.filter(u => u.dues === 'overdue').length, expectedMonthly: paid.length * S.settings.tiers.monthly, duesCollected, suspended: users.filter(u => u.status === 'suspended').length },
+    joinSeries, providers,
+    engagement: { evs, progs, shifts, topics, replies, photos: photos.length, photosApproved: photos.filter(g => g.status === 'approved').length, imamQ: imamQ.length, imamAnswered: imamQ.filter(i => i.status !== 'new').length, bookings: bookings.length, rsvps: S.events.reduce((s, e) => s + e.rsvps.length, 0) },
+    comms: { msgs: msgs.length, reqs: reqs.length, responses: reqs.reduce((s, m) => s + m.responses.length, 0), emails: emails.length, emailRecipients: emails.reduce((s, e) => s + e.count, 0), subs }
+  };
+}
+const SECTIONS = [['giving', 'Giving summary'], ['trend', 'Giving over time'], ['funds', 'Giving by fund'], ['methods', 'How people give'], ['donors', 'Top donors'], ['members', 'Membership'], ['engagement', 'Community engagement'], ['comms', 'Communications']];
+const STATS = {
+  giving: [['total', 'Total given'], ['count', 'Number of gifts'], ['donors', 'Donors'], ['avg', 'Average gift'], ['recurring', 'Recurring share'], ['offline', 'Given offline'], ['zakat', 'Zakat and zakat al-fitr']],
+  members: [['total', 'Total members'], ['paid', 'Supporting members'], ['new', 'New members'], ['overdue', 'Dues overdue'], ['expected', 'Expected monthly dues'], ['collected', 'Dues collected']]
+};
+function repState() {
+  if (!UI.rep) UI.rep = { sections: Object.fromEntries(SECTIONS.map(([k]) => [k, k !== 'donors'])), stats: { giving: Object.fromEntries(STATS.giving.map(([k]) => [k, true])), members: Object.fromEntries(STATS.members.map(([k]) => [k, true])) }, charts: true, tables: true, hideNames: true, notes: '', title: '' };
+  return UI.rep;
+}
+const deltaChip = (d, unit = 'vs previous period') => d === null ? `<span class="tiny muted">No earlier data</span>` : `<span class="delta ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? '▲' : '▼'} ${Math.abs(d)}%</span> <span class="tiny muted">${unit}</span>`;
+function statTile(sec, key, label, value, sub) {
+  const rep = repState(); const on = rep.stats[sec][key];
+  return `<div class="kpi stat ${on ? '' : 'off'}"><label class="stat-pick" title="Include in report"><input type="checkbox" data-action-change="rep-stat" data-sec="${sec}" data-k="${key}" ${on ? 'checked' : ''} aria-label="Include ${esc(label)} in the report"></label><div class="k">${label}</div><div class="v">${value}</div><div class="d">${sub || ''}</div></div>`;
+}
+function secHead(key, title, sub) {
+  const on = repState().sections[key];
+  return `<div class="row between" style="align-items:flex-start;margin-bottom:8px"><div><h3 style="margin:0">${title}</h3>${sub ? `<p class="small muted" style="margin:2px 0 0">${sub}</p>` : ''}</div><label class="check small sec-pick"><input type="checkbox" data-action-change="rep-sec" data-k="${key}" ${on ? 'checked' : ''}> In report</label></div>`;
+}
+function miniTable(head, rows) { return rows.length ? `<div class="table-wrap" style="margin-top:10px"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : '<div class="empty small">No data in this period.</div>'; }
+function aAnalytics() {
+  const R = getRange(), D = analyticsData(R), rep = repState(), pr = (UI.ar || {}).preset || '30';
+  const g = D.giving, m = D.members, e = D.engagement, c = D.comms;
+  const totalBySeries = D.series.map(s => ({ ...s }));
+  return `<div class="card"><div class="row between" style="align-items:flex-end"><div><h3 style="margin:0">Period</h3><p class="small muted" style="margin:2px 0 0">${R.label} · compared with the ${R.days} days before</p></div>
+    <div class="row"><button class="btn gold sm report-jump" data-action="goto-report">${icon('download')} Build a PDF report</button>${pr === 'custom' ? `<input type="date" value="${R.from}" data-action-change="ar-from" style="width:auto" aria-label="From"><input type="date" value="${R.to}" max="${nowIso()}" data-action-change="ar-to" style="width:auto" aria-label="To">` : ''}</div></div>
+    <div class="filter-row" style="margin:12px 0 0">${RANGE_PRESETS.map(([k, l]) => `<button data-action="ar" data-v="${k}" class="${pr === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+  <div class="analytics-layout"><div class="stack">
+    <div class="card">${secHead('giving', 'Giving summary', g.pending ? `${g.pending} logged gift${g.pending === 1 ? '' : 's'} still waiting for approval aren’t included.` : 'Approved gifts only.')}
+      <div class="kpis kpis-3">${statTile('giving', 'total', 'Total given', money(g.total), deltaChip(g.delta))}${statTile('giving', 'count', 'Number of gifts', g.count, g.prevComplete ? `${g.pcount} the period before` : 'No full earlier period to compare')}${statTile('giving', 'donors', 'Donors', g.donors, 'Named donors and anonymous groups')}${statTile('giving', 'avg', 'Average gift', money(Math.round(g.avg)), '')}${statTile('giving', 'recurring', 'Recurring share', g.recurringPct + '%', 'From monthly or yearly gifts')}${statTile('giving', 'offline', 'Given offline', g.offlinePct + '%', 'Cash, checks, Zelle logged by staff')}${statTile('giving', 'zakat', 'Zakat and zakat al-fitr', money(g.zakat), 'Kept separate for eligible recipients')}</div></div>
+    <div class="card">${secHead('trend', 'Giving over time', D.weekly ? 'By week' : 'By month')}${columns(totalBySeries, { fmt: money, unit: '' })}</div>
+    <div class="grid g2"><div class="card">${secHead('funds', 'Giving by fund')}${barsH(D.byFund, money)}</div><div class="card">${secHead('methods', 'How people give')}${barsH(D.byMethod, money)}</div></div>
+    <div class="card">${secHead('donors', 'Top donors', 'Named donors only. Turn on “Hide donor names” for reports shared beyond the executive team.')}${miniTable(['Donor', 'Gifts', 'Total'], D.topDonors.map(d => [d.name, d.gifts, money(d.total)]))}</div>
+    <div class="card">${secHead('members', 'Membership')}
+      <div class="kpis kpis-3">${statTile('members', 'total', 'Total members', m.total, `${m.free} free · ${m.suspended} suspended`)}${statTile('members', 'paid', 'Supporting members', m.paid, Math.round(m.paid / Math.max(1, m.total) * 100) + '% of members')}${statTile('members', 'new', 'New members', m.newCount, deltaChip(m.delta))}${statTile('members', 'overdue', 'Dues overdue', m.overdue, 'Supporting members behind on dues')}${statTile('members', 'expected', 'Expected monthly dues', money(m.expectedMonthly), `${m.paid} × ${money(S.settings.tiers.monthly)}`)}${statTile('members', 'collected', 'Dues collected', money(m.duesCollected), 'In this period')}</div>
+      <div class="grid g2" style="margin-top:12px"><div><h4>New members by month</h4>${columns(D.joinSeries, { unit: ' new members' })}</div><div><h4>How members sign in</h4>${barsH(D.providers)}</div></div></div>
+    <div class="card">${secHead('engagement', 'Community engagement')}
+      <div class="kpis kpis-3"><div class="kpi"><div class="k">Forum activity</div><div class="v">${e.topics + e.replies}</div><div class="d">${e.topics} topics, ${e.replies} replies</div></div><div class="kpi"><div class="k">Ask the Imam</div><div class="v">${e.imamQ}</div><div class="d">${e.imamAnswered} answered</div></div><div class="kpi"><div class="k">Photos shared</div><div class="v">${e.photos}</div><div class="d">${e.photosApproved} published</div></div></div>
+      <h4 style="margin-top:14px">Events and RSVPs</h4>${miniTable(['Event', 'Date', 'Going'], e.evs)}<h4 style="margin-top:14px">Class registrations</h4>${miniTable(['Program', 'For', 'Registered'], e.progs)}<h4 style="margin-top:14px">Volunteer shifts</h4>${miniTable(['Shift', 'Filled', 'Fill rate'], e.shifts)}</div>
+    <div class="card">${secHead('comms', 'Communications')}
+      <div class="kpis kpis-3"><div class="kpi"><div class="k">Messages sent</div><div class="v">${c.msgs}</div><div class="d">${c.reqs} requests, ${c.responses} responses</div></div><div class="kpi"><div class="k">Emails queued</div><div class="v">${c.emails}</div><div class="d">${c.emailRecipients} recipients in total</div></div></div>
+      <h4 style="margin-top:14px">Email subscribers by type</h4>${barsH(c.subs)}</div>
+    <div class="card"><h3>Website visits</h3><p class="small muted" style="margin:0">Visits, top pages and devices appear here once Vercel Web Analytics is turned on for the project. Nothing is tracked yet, so no numbers are shown.</p></div>
+  </div>
+  <aside class="report-panel"><form class="card stack-sm" data-form="report"><h3 style="margin:0">Build a PDF report</h3><p class="small muted" style="margin:0">Tick sections here or with the “In report” boxes. Tick or untick individual figures on their tiles.</p>
+    <label class="f">Report title<input name="title" value="${esc(rep.title || 'Executive report')}" data-action-change="rep-title"></label>
+    <div class="stack-sm">${SECTIONS.map(([k, l]) => `<label class="check small"><input type="checkbox" data-action-change="rep-sec" data-k="${k}" ${rep.sections[k] ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:4px 0">
+    <label class="check small"><input type="checkbox" data-action-change="rep-opt" data-k="charts" ${rep.charts ? 'checked' : ''}> Include charts</label>
+    <label class="check small"><input type="checkbox" data-action-change="rep-opt" data-k="tables" ${rep.tables ? 'checked' : ''}> Include tables</label>
+    <label class="check small"><input type="checkbox" data-action-change="rep-opt" data-k="hideNames" ${rep.hideNames ? 'checked' : ''}> Hide donor names</label>
+    <label class="f">Notes for the board <span class="hint">Optional, printed at the top</span><textarea name="notes" style="min-height:70px" data-action-change="rep-notes">${esc(rep.notes)}</textarea></label>
+    <button class="btn gold block" type="submit">${icon('download')} Download PDF</button>
+    <button class="btn ghost block" type="button" data-action="report-csv">Download data (CSV)</button>
+    <p class="tiny muted" style="margin:0">Covers ${R.label}. Reports include only approved gifts.</p></form></aside></div>`;
+}
+Object.assign(A, {
+  ar: el => { UI.ar = { ...(UI.ar || {}), preset: el.dataset.v }; if (el.dataset.v === 'custom' && !UI.ar.from) { UI.ar.from = addDays(nowIso(), -29); UI.ar.to = nowIso(); } render(false); },
+  'report-csv': () => { const R = getRange(), D = analyticsData(R), rep = repState(); const lines = [csvRow(['Atlanta Muslim Jamaat', rep.title || 'Executive report']), csvRow(['Period', R.label]), '', csvRow(['Metric', 'Value']),
+      csvRow(['Total given', D.giving.total]), csvRow(['Number of gifts', D.giving.count]), csvRow(['Donors', D.giving.donors]), csvRow(['Average gift', Math.round(D.giving.avg)]), csvRow(['Zakat and zakat al-fitr', D.giving.zakat]), csvRow(['Total members', D.members.total]), csvRow(['Supporting members', D.members.paid]), csvRow(['New members', D.members.newCount]), csvRow(['Dues overdue', D.members.overdue]), '',
+      csvRow([D.weekly ? 'Week of' : 'Month', 'Given']), ...D.series.map(s => csvRow([s.label, s.value])), '', csvRow(['Fund', 'Given']), ...D.byFund.map(s => csvRow([s.label, s.value])), '', csvRow(['Method', 'Given']), ...D.byMethod.map(s => csvRow([s.label, s.value]))];
+    if (downloadFile(`AMJ-analytics-${R.from}-to-${R.to}.csv`, lines.join('\n'), 'text/csv')) toast('Data downloaded.'); else toast('Downloads aren’t allowed here.'); },
+  'goto-report': () => $('.report-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+  'perms-reset': () => { S.perms = null; commit('Permissions reset to the recommended setup.'); }
+});
+Object.assign(CHANGE, {
+  'ar-from': el => { UI.ar = { ...(UI.ar || {}), preset: 'custom', from: el.value }; render(false); },
+  'ar-to': el => { UI.ar = { ...(UI.ar || {}), preset: 'custom', to: el.value }; render(false); },
+  'rep-sec': el => { repState().sections[el.dataset.k] = el.checked; const y = scrollY; render(false); scrollTo(0, y); },
+  'rep-stat': el => { repState().stats[el.dataset.sec][el.dataset.k] = el.checked; el.closest('.kpi').classList.toggle('off', !el.checked); },
+  'rep-opt': el => { repState()[el.dataset.k] = el.checked; },
+  'rep-title': el => { repState().title = el.value; },
+  'rep-notes': el => { repState().notes = el.value; },
+  perm: el => { if (!can('roles')) return; const r = el.dataset.role, p = el.dataset.perm; S.perms = S.perms || JSON.parse(JSON.stringify(DEFAULT_PERMS)); const set = new Set(S.perms[r] || []); el.checked ? set.add(p) : set.delete(p); if (el.checked) set.add('overview'); S.perms[r] = PERM_KEYS.filter(k => set.has(k)); save(); toast(`${ROLE_LABEL[r]}: ${el.checked ? 'can now' : 'can no longer'} ${PERM_ROWS.find(x => x[0] === p)[1].toLowerCase()}.`); }
+});
+
+/* ================= PDF report ================= */
+function loadScript(src) { return new Promise((res, rej) => { if ([...document.scripts].some(s => s.src.endsWith(src))) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('load ' + src)); document.head.appendChild(s); }); }
+async function loadPdf() {
+  if (!(window.jspdf && window.jspdf.jsPDF)) await loadScript('/vendor/jspdf.umd.min.js');
+  if (!window.jspdf.jsPDF.API.autoTable) await loadScript('/vendor/jspdf.plugin.autotable.min.js');
+  return window.jspdf.jsPDF;
+}
+function emblemPng() {
+  return new Promise(res => { const img = new Image(); img.onload = () => { const c = document.createElement('canvas'); c.width = c.height = 160; c.getContext('2d').drawImage(img, 0, 0, 160, 160); res(c.toDataURL('image/png')); }; img.onerror = () => res(null); img.src = S.settings.logo || ('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(EMBLEM.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" '))); });
+}
+const pdfText = s => String(s ?? '').replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/•/g, '-').replace(/×/g, 'x').replace(/ﷺ/g, '(pbuh)').replace(/[^\x00-\xFF]/g, '');
+async function buildReport() {
+  const jsPDF = await loadPdf();
+  const R = getRange(), D = analyticsData(R), rep = repState(), u = me();
+  const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight(), M = 46, CW = W - M * 2;
+  const GREEN = [14, 77, 58], GOLD = [194, 154, 61], INK = [24, 33, 28], MUTED = [96, 112, 104], LINE = [216, 226, 219], SOFT = [238, 243, 239];
+  let y = 0;
+  const logo = await emblemPng();
+  const ensure = h => { if (y + h > H - 52) { doc.addPage(); y = M; } };
+  const heading = (t, sub) => { ensure(46); y += 8; doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(...GREEN); doc.text(pdfText(t), M, y + 12); if (sub) { doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(...MUTED); doc.text(pdfText(sub), M, y + 26); y += 12; } doc.setDrawColor(...GOLD); doc.setLineWidth(1.2); doc.line(M, y + 20, M + 36, y + 20); y += 32; };
+  const tiles = items => { const cols = 3, gap = 10, tw = (CW - gap * (cols - 1)) / cols, th = 54; items.forEach((it, i) => { if (i % cols === 0) ensure(th + gap); const x = M + (i % cols) * (tw + gap), ty = y; doc.setFillColor(...SOFT); doc.setDrawColor(...LINE); doc.roundedRect(x, ty, tw, th, 5, 5, 'FD'); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); doc.setTextColor(...MUTED); doc.text(pdfText(it[0]), x + 10, ty + 16); doc.setFont('helvetica', 'bold'); doc.setFontSize(16); doc.setTextColor(...INK); doc.text(pdfText(it[1]), x + 10, ty + 36); if (it[2]) { doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(...MUTED); doc.text(pdfText(it[2]), x + 10, ty + 48, { maxWidth: tw - 16 }); } if (i % cols === cols - 1 || i === items.length - 1) y += th + gap; }); y += 4; };
+  const colChart = (rows, fmt = v => String(v)) => { if (!rows.length) return; const ch = 150; ensure(ch + 26); const max = Math.max(1, ...rows.map(r => r.value)), base = y + ch, bw = Math.min(34, CW / rows.length * .6), step = CW / rows.length;
+    doc.setDrawColor(...LINE); doc.setLineWidth(.6); [0, .5, 1].forEach(f => { const gy = base - (ch - 18) * f; doc.line(M, gy, M + CW, gy); doc.setFontSize(7); doc.setTextColor(...MUTED); doc.text(pdfText(fmt(Math.round(max * f))), M, gy - 3); });
+    rows.forEach((r, i) => { const h = (ch - 18) * r.value / max, x = M + step * i + (step - bw) / 2; doc.setFillColor(...GREEN); if (h > 0) doc.rect(x, base - h, bw, h, 'F'); doc.setFontSize(7); doc.setTextColor(...MUTED); doc.text(pdfText(r.label), x + bw / 2, base + 11, { align: 'center' }); });
+    const last = rows[rows.length - 1]; doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...INK); doc.text(pdfText(fmt(last.value)), M + step * (rows.length - 1) + step / 2, base - (ch - 18) * last.value / max - 4, { align: 'center' }); doc.setFont('helvetica', 'normal');
+    y = base + 24; };
+  const barChart = (rows, fmt = v => String(v)) => { if (!rows.length) return; const rh = 20, lw = 150; ensure(rows.length * rh + 10); const max = Math.max(1, ...rows.map(r => r.value)), bw = CW - lw - 70;
+    rows.forEach((r, i) => { const ry = y + i * rh; doc.setFontSize(8.5); doc.setTextColor(...INK); let lab = pdfText(r.label); while (lab.length > 4 && doc.getTextWidth(lab) > lw - 12) lab = lab.slice(0, -2).trimEnd() + '…'; lab = lab.replace(/……$/, '…'); doc.text(lab.replace('…', '...'), M + lw - 8, ry + 12, { align: 'right' }); const w = Math.max(2, bw * r.value / max); doc.setFillColor(...GREEN); doc.rect(M + lw, ry + 4, w, 11, 'F'); doc.setTextColor(...MUTED); doc.text(pdfText(fmt(r.value)), M + lw + w + 6, ry + 12); });
+    y += rows.length * rh + 10; };
+  const table = (head, body) => { if (!body.length) return; ensure(40); doc.autoTable({ startY: y, head: [head.map(pdfText)], body: body.map(r => r.map(pdfText)), margin: { left: M, right: M }, styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 5, textColor: INK, lineColor: LINE, lineWidth: .5 }, headStyles: { fillColor: GREEN, textColor: 255, fontStyle: 'bold' }, alternateRowStyles: { fillColor: [247, 250, 248] }, theme: 'grid' }); y = doc.lastAutoTable.finalY + 14; };
+  const para = (t, size = 9.5, color = INK) => { doc.setFont('helvetica', 'normal'); doc.setFontSize(size); doc.setTextColor(...color); const lines = doc.splitTextToSize(pdfText(t), CW); ensure(lines.length * size * 1.35 + 4); doc.text(lines, M, y + size); y += lines.length * size * 1.35 + 6; };
+
+  // Cover band
+  doc.setFillColor(...GREEN); doc.rect(0, 0, W, 92, 'F');
+  if (logo) doc.addImage(logo, 'PNG', M, 22, 48, 48);
+  doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(19); doc.text(pdfText(S.settings.name), M + 62, 44);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(232, 214, 160); doc.text(pdfText(rep.title || 'Executive report'), M + 62, 62);
+  y = 118; doc.setFontSize(9.5); doc.setTextColor(...MUTED);
+  doc.text(pdfText(`Period: ${R.label}  (compared with the previous ${R.days} days)`), M, y); y += 14;
+  doc.text(pdfText(`Prepared by ${u.name}${u.title ? ', ' + u.title : ''} on ${fmtLong(nowIso())}`), M, y); y += 14;
+  doc.setTextColor(...GOLD); doc.setFont('helvetica', 'bold'); doc.text('CONFIDENTIAL - FOR EXECUTIVE COMMITTEE USE', M, y); doc.setFont('helvetica', 'normal'); y += 18;
+  if (rep.notes.trim()) { heading('Notes'); para(rep.notes); }
+
+  const g = D.giving, m = D.members, e = D.engagement, c = D.comms, st = rep.stats;
+  const dtxt = (d, w = 'previous period') => d === null ? 'No earlier data' : `${d >= 0 ? '+' : '-'}${Math.abs(d)}% vs ${w}`;
+  if (rep.sections.giving) { heading('Giving summary', g.pending ? `${g.pending} logged gifts awaiting approval are not included.` : 'Approved gifts only.');
+    tiles([st.giving.total && ['Total given', money(g.total), dtxt(g.delta)], st.giving.count && ['Number of gifts', String(g.count), g.prevComplete ? `${g.pcount} the period before` : ''], st.giving.donors && ['Donors', String(g.donors), ''], st.giving.avg && ['Average gift', money(Math.round(g.avg)), ''], st.giving.recurring && ['Recurring share', g.recurringPct + '%', 'Monthly or yearly gifts'], st.giving.offline && ['Given offline', g.offlinePct + '%', 'Cash, checks, Zelle'], st.giving.zakat && ['Zakat and zakat al-fitr', money(g.zakat), 'Held for eligible recipients']].filter(Boolean)); }
+  if (rep.sections.trend) { heading('Giving over time', D.weekly ? 'By week' : 'By month'); if (rep.charts) colChart(D.series, money); if (rep.tables) table([D.weekly ? 'Week of' : 'Month', 'Given'], D.series.map(s => [s.label, money(s.value)])); }
+  if (rep.sections.funds) { heading('Giving by fund'); if (rep.charts) barChart(D.byFund, money); if (rep.tables) { const t = D.byFund.reduce((s, x) => s + x.value, 0) || 1; table(['Fund', 'Given', 'Share'], D.byFund.map(x => [x.label, money(x.value), Math.round(x.value / t * 100) + '%'])); } }
+  if (rep.sections.methods) { heading('How people give'); if (rep.charts) barChart(D.byMethod, money); if (rep.tables) table(['Method', 'Given'], D.byMethod.map(x => [x.label, money(x.value)])); }
+  if (rep.sections.donors) { heading('Top donors', rep.hideNames ? 'Names hidden for privacy.' : 'Named donors only.'); table(['Donor', 'Gifts', 'Total'], D.topDonors.map((d, i) => [rep.hideNames ? `Donor ${i + 1}` : d.name, String(d.gifts), money(d.total)])); }
+  if (rep.sections.members) { heading('Membership');
+    tiles([st.members.total && ['Total members', String(m.total), `${m.free} free, ${m.suspended} suspended`], st.members.paid && ['Supporting members', String(m.paid), Math.round(m.paid / Math.max(1, m.total) * 100) + '% of members'], st.members.new && ['New members', String(m.newCount), dtxt(m.delta)], st.members.overdue && ['Dues overdue', String(m.overdue), ''], st.members.expected && ['Expected monthly dues', money(m.expectedMonthly), `${m.paid} x ${money(S.settings.tiers.monthly)}`], st.members.collected && ['Dues collected', money(m.duesCollected), 'In this period']].filter(Boolean));
+    if (rep.charts) { ensure(200); para('New members by month', 9, MUTED); colChart(D.joinSeries); } if (rep.tables) table(['Sign-in method', 'Members'], D.providers.map(p => [p.label, String(p.value)])); }
+  if (rep.sections.engagement) { heading('Community engagement'); tiles([['Forum activity', String(e.topics + e.replies), `${e.topics} topics, ${e.replies} replies`], ['Ask the Imam', String(e.imamQ), `${e.imamAnswered} answered`], ['Photos shared', String(e.photos), `${e.photosApproved} published`]]);
+    if (rep.tables) { table(['Event', 'Date', 'Going'], e.evs.map(r => r.map(String))); table(['Program', 'For', 'Registered'], e.progs.map(r => r.map(String))); table(['Volunteer shift', 'Filled', 'Fill rate'], e.shifts.map(r => r.map(String))); } }
+  if (rep.sections.comms) { heading('Communications'); tiles([['Messages sent', String(c.msgs), `${c.reqs} requests, ${c.responses} responses`], ['Emails queued', String(c.emails), `${c.emailRecipients} recipients`]]); if (rep.charts) barChart(c.subs); }
+
+  const n = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setDrawColor(...LINE); doc.setLineWidth(.5); doc.line(M, H - 34, W - M, H - 34); doc.setFontSize(7.5); doc.setTextColor(...MUTED); doc.text(pdfText(`${S.settings.name} - ${rep.title || 'Executive report'} - ${R.label}`), M, H - 22); doc.text(`Page ${i} of ${n}`, W - M, H - 22, { align: 'right' }); }
+  return { doc, name: `AMJ-${(rep.title || 'report').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}-${R.from}-to-${R.to}.pdf` };
+}
+Object.assign(F, {
+  async report(fd, form) {
+    const rep = repState(); rep.title = fd.get('title'); rep.notes = fd.get('notes');
+    if (!Object.values(rep.sections).some(Boolean)) return toast('Pick at least one section for the report.');
+    toast('Building your report…');
+    try { const { doc, name } = await buildReport(); doc.save(name); toast('Report downloaded: ' + name); }
+    catch (err) { console.error(err); toast('The PDF tool didn’t load. Check your connection and try again.'); }
+  }
+});
 /* ================= Save to your phone (install guide) ================= */
 let installPrompt = null;
 const isInstalled = () => { try { return matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch (e) { return false; } };

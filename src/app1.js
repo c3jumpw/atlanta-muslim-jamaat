@@ -4,10 +4,10 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const para = s => esc(s).split(/\n\s*\n/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
 const money = n => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: Number(n) % 1 ? 2 : 0 });
-const STORE_KEY = 'amj-preview-v2';
+const STORE_KEY = 'amj-preview-v3';
 let S;
 function load() {
-  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 2) { if (!s.resources.some(r => r.id === 'r-install')) s.resources.unshift(INSTALL_RESOURCE); return s; } } } catch (e) {}
+  try { const raw = localStorage.getItem(STORE_KEY); if (raw) { const s = JSON.parse(raw); if (s && s.v === 3) { if (!s.resources.some(r => r.id === 'r-install')) s.resources.unshift(INSTALL_RESOURCE); return s; } } } catch (e) {}
   return seed();
 }
 function save() {
@@ -44,6 +44,7 @@ const IC = {
   hand: '<path d="M8 13V5.5a1.5 1.5 0 0 1 3 0V11m0-4.5a1.5 1.5 0 0 1 3 0V11m0-3a1.5 1.5 0 0 1 3 0v5.5c0 4-2.5 7.5-6.5 7.5-2.5 0-4-1.2-5.5-3.5L3.2 14a1.5 1.5 0 0 1 2.5-1.6L8 15"/>',
   gift: '<path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1-2-2.3-3.5-4-3.5a1.8 1.8 0 0 0 0 3.5zm0 0c1-2 2.3-3.5 4-3.5a1.8 1.8 0 0 1 0 3.5z"/>',
   pin: '<path d="M9 4h6l-1 6 3 3H7l3-3zM12 13v7"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M4 20h16"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/>'
 };
 const icon = (k, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[k] || ''}</svg>`;
@@ -104,18 +105,26 @@ const me = () => S.users.find(u => u.id === S.currentUserId) || null;
 const userById = id => S.users.find(u => u.id === id);
 const level = () => { const u = me(); if (!u) return 'visitor'; return u.tier === 'paid' ? 'paid' : 'free'; };
 const isMember = () => level() !== 'visitor';
-/* Staff roles and what each can manage */
-const ROLES = [['member', 'Member'], ['moderator', 'Moderator'], ['editor', 'Editor'], ['admin', 'Admin'], ['superadmin', 'Super admin']];
+/* Staff roles and what each can manage. Super admins can adjust these in Admin → Members & team → Team & roles. */
+const ROLES = [['member', 'Member'], ['moderator', 'Moderator'], ['coordinator', 'Program coordinator'], ['editor', 'Editor'], ['imam', 'Imam'], ['office', 'Office manager'], ['executive', 'Executive'], ['superadmin', 'Super admin']];
 const ROLE_LABEL = Object.fromEntries(ROLES);
-const PERMS = {
-  superadmin: ['overview', 'content', 'messages', 'inbox', 'members', 'roles', 'events', 'gallery', 'forum', 'email', 'prayer', 'site', 'integrations'],
-  admin: ['overview', 'content', 'messages', 'inbox', 'members', 'events', 'gallery', 'forum', 'email', 'prayer', 'site'],
-  editor: ['overview', 'content', 'events', 'gallery'],
+const PERM_KEYS = ['overview', 'analytics', 'finance', 'approve', 'members', 'messages', 'inbox', 'content', 'events', 'gallery', 'forum', 'email', 'prayer', 'site', 'roles', 'integrations'];
+const DEFAULT_PERMS = {
+  superadmin: PERM_KEYS,
+  executive: ['overview', 'analytics', 'finance', 'approve', 'members', 'messages', 'inbox'],
+  office: ['overview', 'finance', 'members', 'messages', 'inbox', 'events', 'prayer', 'site', 'email'],
+  imam: ['overview', 'content', 'inbox', 'prayer', 'forum'],
+  editor: ['overview', 'content', 'events', 'gallery', 'email'],
+  coordinator: ['overview', 'events', 'gallery'],
   moderator: ['overview', 'forum', 'gallery'],
   member: []
 };
-const roleOf = u => (u && PERMS[u.role]) ? u.role : 'member';
-const can = p => PERMS[roleOf(me())].includes(p);
+const permsFor = r => r === 'superadmin' ? PERM_KEYS : ((S && S.perms && S.perms[r]) || DEFAULT_PERMS[r] || []);
+const roleOf = u => { const r = u && (u.role === 'admin' ? 'office' : u.role); return r && DEFAULT_PERMS[r] ? r : 'member'; };
+const can = p => permsFor(roleOf(me())).includes(p);
+const roleTitle = u => u ? (u.title || ROLE_LABEL[roleOf(u)]) : '';
+/* Donations count only once approved (offline gifts wait for a second approver). */
+const counted = d => (d.status || 'approved') === 'approved';
 const isStaff = () => roleOf(me()) !== 'member';
 const isAdmin = () => can('members');
 const canPost = () => isMember() && me().status !== 'suspended';
@@ -188,7 +197,7 @@ function renderShell(route) {
     <a href="#save-to-phone" class="${g === 'save-to-phone' ? 'on' : ''}">Save this site to your phone</a>
     ${isStaff() ? `<a href="#admin" class="${g === 'admin' ? 'on' : ''}">Admin dashboard ${pendingCount() ? `<span class="badge">${pendingCount()}</span>` : ''}</a>` : ''}`;
   const others = S.users.filter(x => x.custom);
-  $('#role-select').innerHTML = [['visitor', 'Visitor'], ['u0', 'Free member'], ['u1', 'Supporting member'], ['u3', 'Moderator'], ['u2', 'Editor'], ['admin', 'Super admin'], ...others.map(o => [o.id, 'You: ' + o.name])]
+  $('#role-select').innerHTML = [['visitor', 'Visitor'], ['u0', 'Free member'], ['u1', 'Supporting member'], ['u3', 'Moderator'], ['u10', 'Program coordinator'], ['u2', 'Editor'], ['imam', 'Imam'], ['u5', 'Office manager'], ['u4', 'Executive (Treasurer)'], ['u6', 'Executive (President)'], ['admin', 'Super admin'], ...others.map(o => [o.id, 'You: ' + o.name])]
     .map(([v, l]) => `<option value="${v}" ${(S.currentUserId || 'visitor') === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
 }
 let sessionDismissed = false;

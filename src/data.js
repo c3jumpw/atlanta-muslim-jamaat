@@ -3,6 +3,7 @@ const TODAY_ISO = (() => {
   const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
   return p; // YYYY-MM-DD in Eastern time
 })();
+const dIsoLocal = iso => new Date(iso + 'T12:00:00Z');
 const addDays = (iso, n) => { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const lastFriday = (() => { const d = new Date(TODAY_ISO + 'T12:00:00Z'); const back = (d.getUTCDay() - 5 + 7) % 7 || 7; return addDays(TODAY_ISO, -back); })();
 let _id = 1000; const uid = p => p + (++_id).toString(36);
@@ -29,18 +30,40 @@ function seed() {
       prefs: { announcements: true, news: i % 3 !== 0, articles: i % 2 === 0, events: true, khutbah: i % 4 !== 3, alerts: true } });
   });
   users[0].name = 'Aisha Rahman'; users[1].name = 'Yusuf Ali'; users[1].tier = 'paid'; users[1].dues = 'active';
-  users[2].role = 'editor'; users[3].role = 'moderator'; users[23].status = 'suspended';
-  users.push({ id: 'admin', name: 'Br. Kareem (Admin)', email: 'admin@example.com', phone: '', tier: 'paid', role: 'superadmin', status: 'active', joined: addDays(TODAY_ISO, -200), provider: 'Google', dues: 'active', renews: addDays(TODAY_ISO, 40), notes: '', prefs: { announcements: true, news: true, articles: true, events: true, khutbah: true, alerts: true } });
+  const staff = { 2: ['editor', 'Communications lead'], 3: ['moderator', 'Forum moderator'], 4: ['executive', 'Treasurer'], 5: ['office', 'Office manager'], 6: ['executive', 'President'], 10: ['coordinator', 'Youth coordinator'] };
+  Object.entries(staff).forEach(([i, [role, title]]) => { users[i].role = role; users[i].title = title; });
+  users[23].status = 'suspended';
+  users.push({ id: 'imam', name: 'Imam (name to be added)', email: 'imam@example.com', phone: '', tier: 'paid', role: 'imam', title: 'Imam', status: 'active', joined: addDays(TODAY_ISO, -300), provider: 'Email', dues: 'active', renews: addDays(TODAY_ISO, 60), notes: '', prefs: { announcements: true, news: true, articles: true, events: true, khutbah: true, alerts: true } });
+  users.push({ id: 'admin', name: 'Br. Kareem (Admin)', email: 'admin@example.com', phone: '', tier: 'paid', role: 'superadmin', title: 'Webmaster', status: 'active', joined: addDays(TODAY_ISO, -200), provider: 'Google', dues: 'active', renews: addDays(TODAY_ISO, 40), notes: '', prefs: { announcements: true, news: true, articles: true, events: true, khutbah: true, alerts: true } });
 
+  /* Twelve months of sample giving: online card gifts plus approved cash, check and Zelle entries, with a Ramadan rise. */
   const donations = [];
-  const fundsCycle = ['sadaqah', 'general', 'zakat', 'sadaqah', 'building', 'general', 'sadaqah', 'zakat'];
-  for (let i = 0; i < 46; i++) {
-    const amt = [20, 50, 25, 100, 250, 10, 75, 40, 500, 30][i % 10];
-    donations.push({ id: uid('d'), userId: i % 5 === 0 ? null : 'u' + (i % 30), name: i % 5 === 0 ? 'Anonymous' : null, fund: fundsCycle[i % fundsCycle.length], amount: amt, freq: i % 6 === 0 ? 'monthly' : 'once', date: addDays(TODAY_ISO, -Math.round(i * 1.3)) });
+  let seedN = 7; const rnd = () => (seedN = (seedN * 9301 + 49297) % 233280) / 233280;
+  const amts = [10, 20, 25, 25, 50, 50, 75, 100, 100, 150, 250, 500, 1000];
+  const fundPick = r => r < .34 ? 'sadaqah' : r < .58 ? 'general' : r < .74 ? 'zakat' : r < .9 ? 'building' : 'sadaqah';
+  for (let day = 365; day >= 1; day--) {
+    const date = addDays(TODAY_ISO, -day), md = date.slice(5);
+    const ramadan = date >= '2026-02-18' && date <= '2026-03-20';
+    const friday = dIsoLocal(date).getUTCDay() === 5;
+    const n = Math.floor(rnd() * (ramadan ? 5 : 2.2)) + (friday ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      const offline = rnd() < .24, r = rnd();
+      const method = offline ? (r < .5 ? 'Cash' : r < .8 ? 'Check' : 'Zelle') : 'Card';
+      let fund = fundPick(rnd()); if (ramadan && rnd() < .35) fund = rnd() < .5 ? 'zakat' : 'iftar'; if (date >= '2026-03-15' && date <= '2026-03-20' && rnd() < .5) fund = 'fitr';
+      const who = rnd() < .2 ? null : 'u' + Math.floor(rnd() * 36);
+      donations.push({ id: uid('d'), userId: who, name: who ? null : (offline && method === 'Cash' ? 'Jumu’ah collection box' : 'Anonymous'), fund, amount: amts[Math.floor(rnd() * amts.length)] * (ramadan ? 1.4 : 1) | 0, freq: !offline && rnd() < .14 ? 'monthly' : 'once', date, method, source: offline ? 'offline' : 'online', status: 'approved', ...(offline ? { loggedBy: 'u5', loggedAt: date, approvedBy: rnd() < .5 ? 'u4' : 'u6', approvedAt: addDays(date, 1), ref: method === 'Check' ? 'Check #' + (1800 + Math.floor(rnd() * 400)) : '' } : {}) });
+    }
   }
+  donations.push(
+    { id: 'd-pend1', userId: null, name: 'Jumu’ah collection box', fund: 'sadaqah', amount: 312, freq: 'once', date: addDays(TODAY_ISO, -1), method: 'Cash', source: 'offline', status: 'pending', ref: 'Envelope 11/6', loggedBy: 'u5', loggedAt: TODAY_ISO, note: 'Friday collection box, counted by Bilal and Hamza after Jumu’ah.' },
+    { id: 'd-pend2', userId: 'u12', name: null, fund: 'building', amount: 1000, freq: 'once', date: addDays(TODAY_ISO, -2), method: 'Check', source: 'offline', status: 'pending', ref: 'Check #2041', loggedBy: 'u4', loggedAt: addDays(TODAY_ISO, -1), note: 'Handed to the treasurer after Isha.' },
+    { id: 'd-pend3', userId: 'u7', name: null, fund: 'zakat', amount: 150, freq: 'once', date: addDays(TODAY_ISO, -3), method: 'Zelle', source: 'offline', status: 'pending', ref: 'Confirmation ZX81-4471', loggedBy: 'u5', loggedAt: addDays(TODAY_ISO, -2), note: '' },
+    { id: 'd-rej1', userId: null, name: 'Anonymous', fund: 'general', amount: 50, freq: 'once', date: addDays(TODAY_ISO, -9), method: 'Cash', source: 'offline', status: 'rejected', ref: '', loggedBy: 'u5', loggedAt: addDays(TODAY_ISO, -9), rejectedBy: 'u4', rejectedAt: addDays(TODAY_ISO, -8), reason: 'Duplicate of the entry logged the same evening.' }
+  );
 
   return {
-    v: 2,
+    v: 3,
+    perms: null,
     emailSettings: { fromName: 'Atlanta Muslim Jamaat', fromAddress: 'updates@your-domain.org', auto: { announcement: true, news: false, article: true, resource: false, khutbah: true, event: true, alert: true } },
     emails: [],
     integrations: { domain: '', supabase: false, resend: false, stripe: false },

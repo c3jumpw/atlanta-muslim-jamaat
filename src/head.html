@@ -435,6 +435,24 @@ td.wrap { white-space: normal; min-width: 220px; }
 .tap-ring { transform-box: fill-box; transform-origin: center; animation: tap-pulse 1.6s ease-out infinite; }
 @keyframes tap-pulse { 0% { transform: scale(.8); opacity: 1; } 100% { transform: scale(1.7); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .tap-ring { animation: none; } }
+
+/* ---------- Analytics & ledger ---------- */
+.analytics-layout { display: grid; gap: 16px; }
+@media (min-width: 1100px) { .analytics-layout { grid-template-columns: minmax(0, 1fr) 290px; align-items: start; } .report-panel { position: sticky; top: 80px; } }
+.analytics-layout > * { min-width: 0; }
+.kpis.kpis-3 { grid-template-columns: repeat(2, 1fr); }
+@media (min-width: 760px) { .kpis.kpis-3 { grid-template-columns: repeat(3, 1fr); } }
+.kpi.stat { position: relative; padding-right: 38px; }
+.kpi.stat.off { opacity: .5; }
+.stat-pick { position: absolute; top: 10px; right: 10px; }
+.stat-pick input, .sec-pick input, .perm-table input { width: 18px; height: 18px; accent-color: var(--green); }
+.sec-pick { white-space: nowrap; font-weight: 600; }
+@media (min-width: 1100px) { .report-jump { display: none; } }
+.delta { font-weight: 700; font-size: 13px; }
+.delta.up { color: var(--ok); }
+.delta.down { color: var(--bad); }
+.perm-table td, .perm-table th { text-align: center; }
+.perm-table td:first-child, .perm-table th:first-child { text-align: left; }
 /* ---------- Modal & toast ---------- */
 .modal-scrim { position: fixed; inset: 0; background: rgba(5, 20, 14, .5); z-index: 80; display: grid; place-items: end center; padding: 0; }
 @media (min-width: 640px) { .modal-scrim { place-items: center; padding: 20px; } }
